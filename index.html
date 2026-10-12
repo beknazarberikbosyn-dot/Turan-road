@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Turan Road — путешествие по Великой степи</title>
+  <meta name="description" content="Интерактивное путешествие батыра на коне по природе и истории казахских земель: легенды, традиции, животные и путешествия во времени.">
+  <meta name="theme-color" content="#6FC3EE">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Unbounded:wght@400;600;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- Мир: небо, карта, облака -->
+  <div id="world" class="world is-menu">
+    <div class="sky" aria-hidden="true"><div class="sun"></div><div class="birds"><i></i><i></i><i></i></div></div>
+    <div class="map-stage" id="mapStage">
+      <svg id="map" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice" aria-label="Карта казахских земель"></svg>
+    </div>
+    <div class="clouds clouds-ambient" aria-hidden="true">
+      <i class="cloud c1"></i><i class="cloud c2"></i><i class="cloud c3"></i><i class="cloud c4"></i><i class="cloud c5"></i>
+    </div>
+    <div class="clouds clouds-rush" aria-hidden="true">
+      <i style="--x:-38vw;--y:-30vh;--s:2.6"></i><i style="--x:36vw;--y:-26vh;--s:2.9"></i>
+      <i style="--x:-44vw;--y:22vh;--s:3.1"></i><i style="--x:40vw;--y:28vh;--s:2.7"></i>
+      <i style="--x:-6vw;--y:-40vh;--s:2.4"></i><i style="--x:8vw;--y:40vh;--s:3.3"></i>
+      <i style="--x:-24vw;--y:2vh;--s:2.2"></i><i style="--x:22vw;--y:-4vh;--s:2.2"></i>
+    </div>
+  </div>
+
+  <!-- Главное меню -->
+  <section id="menu" class="menu" aria-label="Главное меню">
+    <div class="menu-top">
+      <div class="menu-hero" id="menuHero"></div>
+      <h1 class="logo">
+        <span class="sr-only">Turan Road</span>
+        <svg class="logo-svg" viewBox="0 0 640 330" aria-hidden="true">
+          <defs>
+            <linearGradient id="logoFace" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#E0503F"/><stop offset=".55" stop-color="#C13A2D"/><stop offset="1" stop-color="#99291F"/>
+            </linearGradient>
+            <g id="logoText" font-family="Unbounded, 'Arial Black', sans-serif" font-weight="900">
+              <text x="22" y="138" font-size="150" textLength="560" lengthAdjust="spacingAndGlyphs">TURAN</text>
+              <text x="170" y="292" font-size="150" textLength="440" lengthAdjust="spacingAndGlyphs">ROAD</text>
+            </g>
+          </defs>
+          <g class="logo-extrude" fill="#3B2C5E" stroke="#3B2C5E" stroke-width="16" stroke-linejoin="round">
+            <use href="#logoText" x="3" y="4"/><use href="#logoText" x="6" y="8"/><use href="#logoText" x="9" y="12"/><use href="#logoText" x="12" y="16"/>
+          </g>
+          <use href="#logoText" fill="#F4E3C1" stroke="#F4E3C1" stroke-width="16" stroke-linejoin="round"/>
+          <use href="#logoText" fill="url(#logoFace)" stroke="#6E1D17" stroke-width="3" stroke-linejoin="round"/>
+          <g class="logo-orn" transform="translate(28,232)" fill="none" stroke="#E7A93B" stroke-width="7" stroke-linecap="round">
+            <path d="M60,40 V10 M60,26 Q34,6 22,22 Q12,38 30,40 Q40,40 38,30 M60,26 Q86,6 98,22 Q108,38 90,40 Q80,40 82,30"/>
+          </g>
+        </svg>
+        <span class="logo-sub">Тұран жолы: путешествие по Великой степи</span>
+      </h1>
+    </div>
+    <nav class="menu-buttons">
+      <button class="plank" id="btnPlay">Играть</button>
+      <button class="plank" id="btnSettings">Настройки</button>
+      <button class="plank" id="btnCredits">Авторы</button>
+    </nav>
+  </section>
+
+  <!-- Интерфейс игры -->
+  <section id="hud" class="hud" hidden aria-label="Панель путешественника">
+    <div class="hud-card">
+      <div class="hud-avatar" id="hudAvatar"></div>
+      <div class="hud-info">
+        <b id="hudName"></b><small id="hudSub"></small>
+        <div class="hud-stones"><span id="hudStones"></span><em id="hudCount"></em></div>
+      </div>
+    </div>
+    <div class="hud-actions">
+      <button class="hbtn" id="hudJournal">Журнал</button>
+      <button class="hbtn" id="hudSettings">Настройки</button>
+      <button class="hbtn" id="hudMenu">Меню</button>
+    </div>
+    <p class="hud-hint" id="hudHint"></p>
+    <div class="hud-zoom">
+      <button class="zbtn" id="zoomIn" aria-label="Приблизить">+</button>
+      <button class="zbtn" id="zoomOut" aria-label="Отдалить">−</button>
+      <button class="zbtn" id="hudCenter" aria-label="Найти героя"><svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M12 1v5M12 18v5M1 12h5M18 12h5" stroke="currentColor" stroke-width="2.4"/></svg></button>
+    </div>
+  </section>
+
+  <div id="overlay" class="overlay" hidden></div>
+
+  <!-- Портал времени -->
+  <div id="portal" class="portal" hidden aria-hidden="true">
+    <svg viewBox="-100 -100 200 200">
+      <g class="ring r1"><circle r="78" fill="none" stroke="#E7A93B" stroke-width="3" stroke-dasharray="10 8"/></g>
+      <g class="ring r2"><circle r="60" fill="none" stroke="#7FD6DA" stroke-width="5" stroke-dasharray="2 10" stroke-linecap="round"/></g>
+      <g class="ring r3"><path d="M0,-44 Q12,-20 0,0 Q-12,-20 0,-44Z M0,44 Q12,20 0,0 Q-12,20 0,44Z M-44,0 Q-20,12 0,0 Q-20,-12 -44,0Z M44,0 Q20,12 0,0 Q20,-12 44,0Z" fill="#F4E3C1" opacity=".9"/></g>
+      <circle r="14" fill="#fff"/>
+    </svg>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
