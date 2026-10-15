@@ -305,6 +305,30 @@ export const sfx = {
     const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.08, t + 0.8); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
     o.connect(g); g.connect(sfxBus); o.start(t); o.stop(t + 1.9);
   },
+  pop() { if (!ctx) return; const t = now(); bell(t, 84, 0.3, 0.12, sfxBus); bell(t + 0.07, 91, 0.4, 0.1, sfxBus); },
+  jump() { if (!ctx) return; const t = now(); pluck(t, 74, 0.1, 0.1, sfxBus); pluck(t + 0.05, 81, 0.1, 0.08, sfxBus); },
+  hit() { if (!ctx) return; const t = now(); drum(t, 0.4, sfxBus, 0.6); sfx.wrong(); },
+  tock() { if (!ctx) return; const t = now(); drum(t, 0.12, sfxBus, 3.2); },
+  arrow() { if (!ctx) return; sfx.whoosh(0.45); },
+  stone() { if (!ctx) return; const t = now(); drum(t, 0.3, sfxBus, 0.8); drum(t + 0.06, 0.15, sfxBus, 1.6); },
+  shutter() {
+    if (!ctx) return; const t = now();
+    [0, 0.07].forEach((d) => {
+      const n = ctx.createBufferSource(); n.buffer = noiseBuf;
+      const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2500;
+      const g = ctx.createGain(); env(g, t + d, 0.002, 0.25, 0.04);
+      n.connect(hp); hp.connect(g); g.connect(sfxBus); n.start(t + d); n.stop(t + d + 0.06);
+    });
+  },
+  splash() {
+    if (!ctx) return; const t = now();
+    const n = ctx.createBufferSource(); n.buffer = noiseBuf;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
+    bp.frequency.setValueAtTime(1800, t); bp.frequency.exponentialRampToValueAtTime(300, t + 0.35);
+    const g = ctx.createGain(); env(g, t, 0.01, 0.35, 0.35);
+    n.connect(bp); bp.connect(g); g.connect(sfxBus); n.start(t); n.stop(t + 0.45);
+  },
+  hum() { if (!ctx) return; const t = now(); pad(t, [43, 50, 55], 1.4, 0.05, sfxBus); },
   eagle() {
     if (!ctx) return; const t = now();
     const o = ctx.createOscillator(); o.type = 'triangle';
@@ -332,3 +356,13 @@ export function startHooves(period = 0.42) {
   }, 40);
 }
 export function stopHooves() { clearInterval(st.hoof); st.hoof = null; }
+
+// ── для мини-игр ───────────────────────────────────────
+export function note(m, vol = 0.22) { if (ctx) pluck(ctx.currentTime + 0.005, m, 0.45, vol, sfxBus); }
+export function beat(hi = 1, vol = 0.2) { if (ctx) drum(ctx.currentTime + 0.005, vol, sfxBus, hi); }
+export function clock() { return ctx ? ctx.currentTime : performance.now() / 1000; }
+export function duck(on) {
+  if (!musicBus) return;
+  musicBus.gain.cancelScheduledValues(ctx.currentTime);
+  musicBus.gain.setTargetAtTime(on ? 0.0001 : st.music * 0.55, ctx.currentTime, 0.2);
+}

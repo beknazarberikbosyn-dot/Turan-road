@@ -3,11 +3,12 @@ import * as audio from './audio.js';
 import { MapView, P, locXY } from './map.js';
 import { heroSVG, COATS, HERO_TYPES } from './hero.js';
 import { sceneSVG, avatarSVG, artifactSVG, stoneSVG } from './scenes.js';
+import { playGame, GAME_NAMES } from './games.js';
 
 // ── состояние ─────────────────────────────────────────
 const KEY = 'turanroad.v1';
 const defaults = () => ({
-  hero: null, introSeen: false, endingSeen: false, completed: [], pos: 'start',
+  hero: null, introSeen: false, endingSeen: false, completed: [], pos: 'start', stars: {},
   settings: { bright: 1, music: 0.6, sfx: 0.8, speed: 'normal' },
 });
 let S = load();
@@ -45,6 +46,12 @@ function music(name) { theme = name; audio.playTheme(name); }
 
 document.addEventListener('pointerover', (e) => { if (e.target.closest?.('.plank, .btn')) audio.sfx.hover(); });
 
+// ── доступность точек: после первой открыта вся степь ──
+const isFree = () => S.completed.includes(LOCS[0].id);
+const isOpen = (id) => id === LOCS[0].id || isFree() || S.completed.includes(id);
+const gameName = (l) => (l.game.type === 'snap' && l.game.mode === 'fish' ? GAME_NAMES.fish : GAME_NAMES[l.game.type]);
+const starsHTML = (n = 0) => `<span class="stars-mini" aria-label="${n} из 3">${[1, 2, 3].map((i) => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</span>`;
+
 // ── герой на карте ────────────────────────────────────
 function heroPos() {
   if (S.pos === 'start') return P(START.lat, START.lon);
@@ -59,6 +66,7 @@ function refreshMap() {
   renderHud();
 }
 refreshMap();
+map.startLife();
 map.setMenu(false);
 renderMenuHero();
 
@@ -75,8 +83,9 @@ function renderHud() {
   $('#hudAvatar').innerHTML = heroSVG(S.hero || { type: 'batyr', coat: 'tory' });
   $('#hudStones').innerHTML = LOCS.map((l) => `<span class="st ${done.has(l.id) ? 'on' : ''}" style="--c:${l.artifact.color}" title="${l.artifact.name}"></span>`).join('');
   $('#hudCount').textContent = `${done.size} из ${LOCS.length}`;
-  const next = LOCS.find((l) => !done.has(l.id));
-  $('#hudHint').textContent = next ? `Следующая точка: ${next.name}. Нажми на неё на карте.` : 'Все камни собраны! Можно пройти любую точку снова.';
+  const left = LOCS.length - done.size;
+  $('#hudHint').textContent = !isFree() ? `Первая точка: ${LOCS[0].name}. Нажми на неё на карте.`
+    : left ? `Выбери на карте любую точку — осталось камней: ${left}.` : 'Все камни собраны! Можно вернуться в любую точку.';
 }
 
 // ── всплывающее сообщение ─────────────────────────────
@@ -317,37 +326,63 @@ async function runIntro() {
 }
 
 // ── выбор точки на карте ──────────────────────────────
-map.onSelect = async (id) => {
+map.onSelect = (id) => {
   if (busy || !overlay.hidden) return;
-  const idx = LOCS.findIndex((l) => l.id === id);
-  const loc = LOCS[idx];
-  const done = new Set(S.completed);
-  const unlocked = done.has(id) || LOCS.slice(0, idx).every((l) => done.has(l.id));
-  if (!unlocked) {
+  const loc = LOCS.find((l) => l.id === id);
+  if (!isOpen(id)) {
     audio.sfx.wrong();
-    const need = LOCS.find((l) => !done.has(l.id));
-    toast(`Путь в ${loc.name} пока закрыт. Сначала доберись до точки «${need.name}».`);
+    toast(`Сначала доберись до точки «${LOCS[0].name}» — оттуда открываются все дороги степи.`);
     return;
   }
   audio.sfx.click();
-  busy = true;
-  const [x, y] = locXY(loc);
-  if (S.pos !== id) {
-    await map.travel(x, y, () => audio.startHooves(), () => audio.stopHooves());
-    S.pos = id; save();
-  }
-  busy = false;
-  openLocation(loc);
+  openDestination(loc);
 };
 
+function openDestination(loc) {
+  const done = S.completed.includes(loc.id);
+  const here = S.pos === loc.id;
+  const cats = [...new Set(loc.facts.map((f) => f.cat))];
+  const m = openModal(`
+    <div class="dest">
+      <div class="dest-art">${sceneSVG(loc.kind, 'day')}${done ? `<div class="dest-tumar">${artifactSVG(loc.artifact.glyph, loc.artifact.color, 64)}</div>` : ''}</div>
+      <div class="dest-body">
+        <h2 class="m-title">${loc.name}</h2>
+        <p class="m-sub">${loc.ru !== loc.name ? loc.ru + '. ' : ''}${loc.region}</p>
+        <ul class="dest-info">
+          <li><span>Тебя встретит</span><b>${esc(loc.npc.name)}, ${esc(loc.npc.role)}</b></li>
+          <li><span>Испытание</span><b>${esc(loc.game.title)}</b>${gameName(loc) !== loc.game.title ? `<em>${gameName(loc)}</em>` : ''}</li>
+          <li><span>Узнаешь про</span><div class="chips">${cats.map((c) => `<i style="--cat:${CATS[c].color}">${CATS[c].name}</i>`).join('')}</div></li>
+          ${done ? `<li><span>Твой результат</span>${starsHTML(S.stars[loc.id])}</li>` : ''}
+        </ul>
+        <div class="set-foot">
+          <button class="btn ghost" id="dStay">Остаться</button>
+          <button class="btn big ready" id="dGo">${here ? 'Войти' : done ? 'Отправиться снова' : 'Отправиться'}</button>
+        </div>
+      </div>
+    </div>`, { cls: 'modal-dest' });
+  $('#dStay', m).addEventListener('click', () => { audio.sfx.click(); closeModal(); });
+  $('#dGo', m).addEventListener('click', async () => {
+    audio.sfx.unlock();
+    closeModal();
+    busy = true;
+    const [x, y] = locXY(loc);
+    if (S.pos !== loc.id) {
+      await map.travel(x, y, () => audio.startHooves(), () => audio.stopHooves());
+      S.pos = loc.id; save(); refreshMap();
+    }
+    busy = false;
+    openLocation(loc);
+  });
+}
+
 // ── прохождение точки ─────────────────────────────────
-const STEPS = ['Знакомство', 'Знания', 'Задание', 'Тұмар-тас'];
+const STEPS = ['Знакомство', 'Знания', 'Испытание', 'Вопросы', 'Тұмар-тас'];
 
 async function openLocation(loc) {
   const replay = S.completed.includes(loc.id);
   const m = openModal(`
     <div class="scene">
-      <div class="scene-art" id="art">${sceneSVG(loc.kind, 'day')}<div class="era" id="era" hidden></div></div>
+      <div class="scene-art" id="art">${sceneSVG(loc.kind, 'day')}<div class="era" id="era" hidden></div><div class="scene-hero">${heroSVG(S.hero, 'idle')}</div><div class="scene-npc">${avatarSVG(loc.npc.avatar, loc.npc.color)}</div></div>
       <div class="scene-head">
         <div><h2>${loc.name}</h2><p>${loc.ru !== loc.name ? loc.ru + '. ' : ''}${loc.region}</p></div>
         <ol class="steps" id="steps">${STEPS.map((s, i) => `<li data-i="${i}">${s}</li>`).join('')}</ol>
@@ -369,15 +404,25 @@ async function openLocation(loc) {
     setStep(1);
     await explore(sb, loc);
 
-    // 3. задание
+    // 3. экшен-испытание
     setStep(2);
-    await dialog(sb, [{ who: 'npc', text: loc.mission.intro }], who, 'Принять задание');
-    for (let i = 0; i < loc.mission.tasks.length; i++) {
-      await runTask(sb, loc.mission.tasks[i], i, loc.mission.tasks.length);
-    }
+    await dialog(sb, [{ who: 'npc', text: loc.game.intro }], who, 'Принять испытание');
+    m.classList.add('gaming');
+    music('menu');
+    const res = await playGame(sb, loc.game, { hero: S.hero });
+    guardOpen(sb);
+    m.classList.remove('gaming');
+    music('village');
+    if (res.win) { S.stars[loc.id] = Math.max(S.stars[loc.id] || 0, res.stars); save(); }
 
-    // 4. камень памяти и путешествие во времени
+    // 4. вопросы
     setStep(3);
+    await dialog(sb, [{ who: 'npc', text: res.win ? 'Вот это ловкость! А теперь проверим, что ты запомнил.' : 'Ничего, в следующий раз получится! А теперь проверим, что ты запомнил.' }], who, 'К вопросам');
+    const tasks = pickTasks(loc.mission.tasks);
+    for (let i = 0; i < tasks.length; i++) await runTask(sb, tasks[i], i, tasks.length);
+
+    // 5. камень памяти и путешествие во времени
+    setStep(4);
     await stoneStep(sb, loc);
     await timeTravel(m, sb, loc);
     await reward(sb, loc, replay);
@@ -387,6 +432,13 @@ async function openLocation(loc) {
 }
 
 function guardOpen(sb) { if (!document.body.contains(sb)) throw 'closed'; }
+
+// два вопроса: один обычный и один «действием» (порядок или выбор нескольких)
+function pickTasks(tasks) {
+  const q = tasks.find((t) => t.type === 'quiz');
+  const other = tasks.find((t) => t.type !== 'quiz');
+  return other ? [q, other] : tasks.slice(0, 2);
+}
 
 function explore(sb, loc) {
   return new Promise((res) => {
@@ -418,12 +470,12 @@ function hintBox(text) {
 
 function runTask(sb, task, idx, total) {
   return new Promise((res) => {
-    const head = `<p class="task-n">Задание ${idx + 1} из ${total}</p><h3 class="task-q">${esc(task.q)}</h3>`;
+    const head = `<p class="task-n">Вопрос ${idx + 1} из ${total}</p><h3 class="task-q">${esc(task.q)}</h3>`;
     const success = (msg = 'Верно! Так и есть.') => {
       audio.sfx.correct();
       $('.task-feedback', sb).innerHTML = `<p class="ok">${msg}</p>`;
       const a = $('.actions', sb);
-      a.innerHTML = `<button class="btn ready" id="tNext">${idx === total - 1 ? 'Задание выполнено!' : 'Следующий вопрос'}</button>`;
+      a.innerHTML = `<button class="btn ready" id="tNext">${idx === total - 1 ? 'Готово!' : 'Следующий вопрос'}</button>`;
       reveal($('#tNext', sb));
       $('#tNext', sb).addEventListener('click', () => { audio.sfx.click(); res(); });
     };
@@ -488,13 +540,39 @@ function stoneStep(sb, loc) {
   return new Promise((res) => {
     sb.innerHTML = `
       ${talkHTML(loc.npc)}
-      <div class="stone-wrap"><button class="stone-btn" id="stone" aria-label="Коснуться камня памяти">${stoneSVG(loc.artifact.color)}</button>
-      <p class="lead center">Под ногами светится тұмар-тас — камень памяти. Коснись его, и он покажет прошлое этого места.</p></div>`;
-    typeText($('.talk-text', sb), 'Рахмет, ты справился! Смотри — камень откликнулся на твои знания и засветился.');
+      <div class="stone-wrap"><button class="stone-btn" id="stone" aria-label="Зажми, чтобы зарядить камень памяти">${stoneSVG(loc.artifact.color)}<span class="stone-ring"></span></button>
+      <p class="lead center">Зажми тұмар-тас и держи, пока он не наполнится светом.</p></div>`;
+    typeText($('.talk-text', sb), 'Рахмет! Смотри — камень памяти откликнулся на твои знания. Он покажет тебе прошлое.');
     audio.sfx.chime();
-    reveal($('#stone', sb));
-    $('#stone', sb).addEventListener('click', () => res(), { once: true });
+    const btn = $('#stone', sb);
+    reveal(btn);
+    let p = 0, holding = false, last = performance.now(), done = false, hum = 0;
+    const set = (v) => { holding = v; if (v) audio.sfx.hum(); };
+    btn.addEventListener('pointerdown', (e) => { e.preventDefault(); btn.setPointerCapture?.(e.pointerId); set(true); });
+    ['pointerup', 'pointercancel'].forEach((ev) => btn.addEventListener(ev, () => set(false)));
+    btn.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); set(true); } });
+    btn.addEventListener('keyup', (e) => { if (e.key === 'Enter' || e.key === ' ') set(false); });
+    const tick = (now) => {
+      if (!document.body.contains(btn)) return;
+      const dt = Math.min(0.25, (now - last) / 1000); last = now;
+      p = holding ? Math.min(1, p + dt / 1.0) : Math.max(0, p - dt * 1.2);
+      btn.style.setProperty('--p', p.toFixed(3));
+      btn.classList.toggle('charging', holding);
+      if (holding && (hum += dt) > 0.3) { hum = 0; sparkle(btn, loc.artifact.color); }
+      if (p >= 1 && !done) { done = true; btn.classList.add('full'); setTimeout(res, 350); return; }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
   });
+}
+
+function sparkle(el, color) {
+  const s = document.createElement('i');
+  s.className = 'spark';
+  const a = Math.random() * Math.PI * 2;
+  s.style.cssText = `--dx:${Math.cos(a) * 110}px;--dy:${Math.sin(a) * 80 - 20}px;background:${color}`;
+  el.appendChild(s);
+  s.addEventListener('animationend', () => s.remove());
 }
 
 async function portalFx() {
@@ -532,20 +610,35 @@ async function timeTravel(m, sb, loc) {
       const p = $('.time-text', sb);
       typeText(p, step.text);
       const go = $('#tGo', sb);
+      const art = $('#art', m);
+      $$('.hot', art).forEach((h) => h.remove());
       if (step.choices) {
-        $$('.opt', sb).forEach((b) => b.addEventListener('click', () => {
+        const HOT = [[26, 58], [70, 44]];
+        step.choices.forEach((c, k) => {
+          const h = document.createElement('button');
+          h.className = 'hot'; h.dataset.k = k;
+          h.style.left = HOT[k % 2][0] + '%'; h.style.top = HOT[k % 2][1] + '%';
+          h.innerHTML = `<span>${esc(c.label)}</span>`;
+          h.setAttribute('aria-label', c.label);
+          art.appendChild(h);
+        });
+        const choose = (k) => {
           p._skip?.();
           audio.sfx.page();
-          $$('.opt', sb).forEach((x) => { x.disabled = true; x.classList.toggle('chosen', x === b); });
+          $$('.opt', sb).forEach((x) => { x.disabled = true; x.classList.toggle('chosen', +x.dataset.k === k); });
+          $$('.hot', art).forEach((h) => { h.disabled = true; h.classList.toggle('chosen', +h.dataset.k === k); });
           const r = $('.time-reply', sb);
-          typeText(r, step.choices[+b.dataset.k].reply);
+          typeText(r, step.choices[k].reply);
           go.hidden = false; reveal(go);
-        }));
+        };
+        $$('.opt', sb).forEach((b) => b.addEventListener('click', () => { if (!b.disabled) choose(+b.dataset.k); }));
+        $$('.hot', art).forEach((h) => h.addEventListener('click', () => { if (!h.disabled) choose(+h.dataset.k); }));
       } else reveal(go);
       go.addEventListener('click', () => { audio.sfx.click(); res(); });
     });
   }
   guardOpen(sb);
+  $$('.hot', art).forEach((h) => h.remove());
   await portalFx();
   art.classList.remove('past');
   art.firstElementChild.outerHTML = sceneSVG(loc.kind, 'day');
@@ -556,9 +649,9 @@ async function timeTravel(m, sb, loc) {
 
 function reward(sb, loc, replay) {
   return new Promise((res) => {
-    const idx = LOCS.indexOf(loc);
-    const next = LOCS[idx + 1];
+    const firstUnlock = !replay && loc.id === LOCS[0].id;
     if (!replay) S.completed.push(loc.id);
+    const left = LOCS.length - S.completed.length;
     save();
     audio.sfx.chime();
     const all = S.completed.length === LOCS.length;
@@ -567,7 +660,8 @@ function reward(sb, loc, replay) {
         <div class="reward-art">${artifactSVG(loc.artifact.glyph, loc.artifact.color, 120)}</div>
         <div><p class="task-n">${replay ? 'Этот камень уже в твоём қоржыне' : 'Новый тұмар в твоём қоржыне!'}</p>
         <h3 class="reward-name">${loc.artifact.name}</h3><p>${loc.artifact.desc}</p>
-        ${next && !replay ? `<p class="unlock">Открыт путь: <b>${next.name}</b>. ${next.region}.</p>` : ''}</div>
+        ${S.stars[loc.id] ? `<p>Испытание: ${starsHTML(S.stars[loc.id])}</p>` : ''}
+        ${firstUnlock ? '<p class="unlock"><b>Вся степь открыта!</b> Теперь ты сам выбираешь, куда скакать дальше: в горы Алтая, к Аральскому морю или к поющему бархану.</p>' : !replay && left ? `<p class="unlock">Осталось камней: <b>${left}</b>. Выбирай на карте любую точку.</p>` : ''}</div>
       </div>
       <div class="actions"><button class="btn big ready" id="rGo">${all && !S.endingSeen ? 'Завершить путь' : 'В путь!'}</button></div>`;
     reveal($('#rGo', sb));
@@ -576,10 +670,9 @@ function reward(sb, loc, replay) {
       closeModal();
       music('map');
       refreshMap();
-      if (next && !replay) {
-        toast(`Открыт путь в ${next.name}!`);
-        const [x, y] = locXY(next);
-        map.centerOn((x + map.hero.x) / 2, (y + map.hero.y) / 2, 1000);
+      if (firstUnlock) {
+        toast('Все дороги открыты! Выбирай любую точку на карте.');
+        map.overview(1600);
       }
       if (all && !S.endingSeen) runEnding();
       res();
@@ -611,7 +704,7 @@ function openJournal(selectId) {
     <div class="journal">
       <ul class="j-list">${LOCS.map((l, i) => `<li><button data-id="${l.id}" ${done.has(l.id) ? '' : 'disabled'} aria-pressed="false">
         <span class="j-ico">${done.has(l.id) ? artifactSVG(l.artifact.glyph, l.artifact.color, 34) : `<span class="j-lock">${i + 1}</span>`}</span>
-        <span><b>${l.name}</b><small>${done.has(l.id) ? l.artifact.name : 'ещё не пройдено'}</small></span></button></li>`).join('')}</ul>
+        <span><b>${l.name}</b><small>${done.has(l.id) ? l.artifact.name : 'ещё не пройдено'}</small>${done.has(l.id) && S.stars[l.id] ? starsHTML(S.stars[l.id]) : ''}</span></button></li>`).join('')}</ul>
       <div class="j-page" id="jPage"></div>
     </div>`, { cls: 'modal-journal' });
   const show = (id) => {

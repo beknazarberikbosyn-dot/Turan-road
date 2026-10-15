@@ -376,6 +376,6 @@ export function buildMapSVG() {
     <text y="-33" class="lbl-compass">С</text>
   </g>`;
 
-  o += `<g id="routeLayer"></g><g id="heroLayer"></g><g id="markerLayer"></g>`;
+  o += `<g id="routeLayer"></g><g id="lifeLayer"></g><g id="dustLayer"></g><g id="heroLayer"></g><g id="markerLayer"></g>`;
   return o;
 }
