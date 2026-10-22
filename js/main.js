@@ -13,7 +13,7 @@ import { playFilm } from './film.js';
 // ── состояние ─────────────────────────────────────────
 const KEY = 'turanroad.v1';
 const defaults = () => ({
-  hero: null, introSeen: false, endingSeen: false, completed: [], pos: 'start', stars: {},
+  hero: null, introSeen: false, filmSeen: false, endingSeen: false, completed: [], pos: 'start', stars: {},
   settings: { bright: 1, music: 0.6, sfx: 0.8, voice: 0.7, speed: 'normal' },
 });
 let S = load();
@@ -150,6 +150,13 @@ async function startGame() {
   busy = false;
   if (!S.hero) openCreate();
   else if (!S.introSeen) runIntro();
+  else if (!S.filmSeen) {
+    // кто начал путь до появления фильма — один раз показываем его при входе
+    music('time');
+    await playFilm(S.hero);
+    S.filmSeen = true; save();
+    music('map');
+  }
   else toast(`С возвращением, ${S.hero.name}!`);
 }
 
@@ -307,6 +314,7 @@ async function runIntro() {
   // сначала короткий фильм-сказ о герое, потом встреча на Казыгурте
   music('time');
   await playFilm(S.hero);
+  S.filmSeen = true; save();
   const { st, host } = sceneModal(START.name, 'Начало пути', null, { closable: false, kind: 'kazygurt' });
   music('village');
   try {
