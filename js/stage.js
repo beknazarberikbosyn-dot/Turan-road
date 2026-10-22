@@ -320,9 +320,12 @@ export class Stage {
         this.showNext(o.btn || (o.last ? (o.lastBtn || 'Дальше') : 'Дальше'));
         if (/!$/.test(text.trim())) for (const x of this.actors) if (x !== a && x.gesture && Math.random() < 0.6) x.gesture('nod');
       };
+      let lastT = performance.now();
       const tick = (dt, t) => {
         if (!typingDone) {
-          acc += dt * cps;
+          // печатаем по настоящему времени, а не по кадрам: на слабом устройстве текст не замедляется
+          const now = performance.now();
+          acc += Math.min(0.5, (now - lastT) / 1000) * cps; lastT = now;
           while (acc >= 1 && shown < total) { acc -= 1; shown++; speakChar(text[shown - 1], t); }
           this.subText.textContent = text.slice(0, shown);
           if (shown >= total) { this.tickers.delete(tick); finish(); }

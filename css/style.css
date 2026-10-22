@@ -1033,3 +1033,60 @@ legend { font: 700 13px 'Unbounded', sans-serif; color: var(--red); margin-botto
   .st-spot.drop span { font-size: 11px; }
   .st-name small { display: block; margin: 0; font-size: 11.5px; }
 }
+
+/* ══ ВСТУПИТЕЛЬНЫЙ ФИЛЬМ ═══════════════════════════ */
+.film { position: fixed; inset: 0; z-index: 60; background: #0E0818; display: grid; place-items: center; animation: filmIn .7s ease-out; }
+.film.out { opacity: 0; transition: opacity .6s; }
+.film-frame { position: relative; width: min(100vw, 177.78vh); aspect-ratio: 16 / 9; overflow: hidden; background: #0E0818; }
+.film-stage, .film-stage .stage-wrap, .film-stage .stage { position: absolute; inset: 0; width: 100%; height: 100%; }
+.film-stage .stage { aspect-ratio: auto; cursor: default; }
+.film-stage .st-sub, .film-stage .st-ctrl { display: none; }
+.film-vignette { position: absolute; inset: 0; z-index: 4; pointer-events: none; background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(14, 8, 24, .55)); }
+.film-bar { position: absolute; left: 0; right: 0; height: 8%; background: #0E0818; z-index: 5; }
+.film-bar.top { top: 0; } .film-bar.bottom { bottom: 0; }
+.film-text {
+  position: absolute; left: 7%; right: 7%; bottom: 10%; z-index: 6; margin: 0; min-height: 3em; text-align: center;
+  font: italic 500 clamp(15px, 2.2vw, 27px)/1.5 'Lora', serif; color: #FFF1D6; letter-spacing: .01em;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .9), 0 0 3px #000; transition: opacity .5s;
+  padding: .5em 1.2em .6em; border-radius: 18px; background: radial-gradient(ellipse at 50% 60%, rgba(14, 8, 24, .55), rgba(14, 8, 24, 0) 72%);
+}
+.film-text::before { content: '✦'; display: block; font-style: normal; font-size: .7em; color: var(--gold); margin-bottom: .2em; opacity: .9; }
+.film-text.fade { opacity: 0; }
+.film-text .q { display: inline-block; width: 2px; height: 1em; margin-left: 3px; vertical-align: -.15em; background: var(--gold); animation: blink .8s steps(1) infinite; }
+.film-skip { position: fixed; top: 14px; right: 16px; z-index: 61; font: 700 13px 'Unbounded', sans-serif; color: #FFF1D6; background: rgba(255, 241, 214, .12); border: 2px solid rgba(255, 241, 214, .45); border-radius: 999px; padding: 9px 16px; cursor: pointer; }
+.film-skip:hover, .film-skip:focus-visible { background: rgba(255, 241, 214, .25); }
+/* падающая звезда в ночь рождения */
+.film-frame.star::after { content: ''; position: absolute; z-index: 3; left: 70%; top: 12%; width: 120px; height: 2px; border-radius: 2px; background: linear-gradient(90deg, rgba(255, 255, 255, 0), #FFF6D8); transform: rotate(-24deg); animation: shootStar 1.4s ease-out forwards; }
+/* закатная скачка */
+.film-sil { position: absolute; inset: 0; z-index: 3; opacity: 0; transition: opacity .8s; pointer-events: none; overflow: hidden; }
+.film-sil.on { opacity: 1; }
+.film-sil > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.fs-layer { animation: fsScroll linear infinite; }
+.fs-far { animation-duration: 38s; } .fs-mid { animation-duration: 16s; } .fs-near { animation-duration: 4.5s; }
+.fs-rider { position: absolute; left: 22%; bottom: 13.5%; width: 30%; filter: brightness(0) drop-shadow(0 0 6px rgba(255, 200, 120, .35)); }
+.fs-rider .hero { width: 100%; height: auto; display: block; }
+.fs-eagle { position: absolute; left: 50%; top: 16%; width: 13%; filter: brightness(0); animation: fsGlide 4s ease-in-out infinite alternate; }
+.fs-eagle svg { width: 100%; height: auto; display: block; }
+.fs-dust { position: absolute; left: 20%; bottom: 15%; width: 10%; height: 8%; }
+.fs-dust i { position: absolute; bottom: 0; width: 22px; height: 22px; border-radius: 50%; background: rgba(120, 60, 90, .55); animation: fsDust .9s ease-out infinite; }
+.fs-dust i:nth-child(2) { animation-delay: .22s; } .fs-dust i:nth-child(3) { animation-delay: .45s; } .fs-dust i:nth-child(4) { animation-delay: .67s; }
+/* тринадцать огней на горизонте */
+.film-lights { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.film-lights i { position: absolute; width: 9px; height: 9px; margin: -4px; border-radius: 50%; background: #FFE7A3; box-shadow: 0 0 10px 4px rgba(255, 214, 120, .85); opacity: 0; }
+.film-lights.on i { animation: lightOn .8s ease-out forwards, lightPulse 1.4s ease-in-out infinite alternate; }
+/* название в финале */
+.film-title { position: absolute; inset: 0; z-index: 7; display: grid; place-content: center; text-align: center; gap: 6px; opacity: 0; transform: scale(.94); transition: opacity 1s, transform 1.6s ease-out; pointer-events: none; }
+.film-title.on { opacity: 1; transform: none; }
+.film-title b { font: 900 clamp(34px, 7vw, 86px) 'Unbounded', sans-serif; color: var(--gold); letter-spacing: .04em; text-shadow: 0 4px 0 var(--red-d), 0 0 40px rgba(255, 200, 100, .45); }
+.film-title span { font: italic 600 clamp(14px, 2vw, 22px) 'Lora', serif; color: #FFF1D6; text-shadow: 0 2px 8px #000; }
+@keyframes filmIn { from { opacity: 0; } }
+@keyframes shootStar { from { transform: translate(0, 0) rotate(-24deg); opacity: 0; } 15% { opacity: 1; } to { transform: translate(-380px, 170px) rotate(-24deg); opacity: 0; } }
+@keyframes fsScroll { from { transform: translateX(0); } to { transform: translateX(-960px); } }
+@keyframes fsGlide { from { transform: translate(0, 0) rotate(-3deg); } to { transform: translate(-30px, 14px) rotate(4deg); } }
+@keyframes fsDust { from { transform: translate(0, 0) scale(.4); opacity: .8; } to { transform: translate(-90px, -26px) scale(1.8); opacity: 0; } }
+@keyframes lightOn { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+@keyframes lightPulse { from { box-shadow: 0 0 6px 2px rgba(255, 214, 120, .6); } to { box-shadow: 0 0 16px 7px rgba(255, 214, 120, .95); } }
+@media (max-aspect-ratio: 1/1) {
+  .film-text { position: fixed; top: calc(50% + 28.2vw + 14px); bottom: auto; left: 18px; right: 18px; font-size: 17px; text-shadow: none; }
+}
+@media (prefers-reduced-motion: reduce) { .fs-layer, .fs-eagle, .fs-dust i { animation: none; } }

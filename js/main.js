@@ -8,6 +8,7 @@ import { Stage } from './stage.js';
 import { backdrop, SW, SH } from './backdrop.js';
 import { STORY } from './story.js';
 import { visit, prologue, epilogue, rigPreview, isGirl } from './visit.js';
+import { playFilm } from './film.js';
 
 // ── состояние ─────────────────────────────────────────
 const KEY = 'turanroad.v1';
@@ -182,6 +183,7 @@ function openSettings() {
       </div>
     </div>
     <div class="set-foot">
+      ${S.hero ? '<button class="btn ghost" id="sFilm">Смотреть сказ о герое</button>' : ''}
       <button class="btn ghost" id="sReset">Начать путешествие заново</button>
       <button class="btn" id="sDone">Готово</button>
     </div>`, { cls: 'modal-small' });
@@ -199,6 +201,13 @@ function openSettings() {
     $$('.seg button', m).forEach((x) => x.setAttribute('aria-checked', x === b));
   }));
   $('#sDone', m).addEventListener('click', () => { audio.sfx.click(); closeModal(); });
+  $('#sFilm', m)?.addEventListener('click', async () => {
+    audio.sfx.click(); closeModal();
+    const was = theme;
+    music('time');
+    await playFilm(S.hero);
+    music(was);
+  });
   $('#sReset', m).addEventListener('click', (e) => {
     const b = e.currentTarget;
     if (!b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Точно? Весь прогресс сотрётся'; audio.sfx.wrong(); return; }
@@ -295,6 +304,9 @@ const guardOf = (host) => () => { if (!host.isConnected) throw 'closed'; };
 const revealIn = (el, block = 'nearest') => el?.scrollIntoView({ block, behavior: reduced() ? 'auto' : 'smooth' });
 
 async function runIntro() {
+  // сначала короткий фильм-сказ о герое, потом встреча на Казыгурте
+  music('time');
+  await playFilm(S.hero);
   const { st, host } = sceneModal(START.name, 'Начало пути', null, { closable: false, kind: 'kazygurt' });
   music('village');
   try {
