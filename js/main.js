@@ -1,15 +1,19 @@
-import { LOCS, START, INTRO, ENDING, CATS, GUIDE, EAGLE } from './data.js';
+import { LOCS, START, INTRO, ENDING, CATS, GUIDE } from './data.js';
 import * as audio from './audio.js';
 import { MapView, P, locXY } from './map.js';
 import { heroSVG, COATS, HERO_TYPES } from './hero.js';
-import { sceneSVG, avatarSVG, artifactSVG, stoneSVG } from './scenes.js';
+import { artifactSVG } from './scenes.js';
 import { playGame, GAME_NAMES } from './games.js';
+import { Stage } from './stage.js';
+import { backdrop, SW, SH } from './backdrop.js';
+import { STORY } from './story.js';
+import { visit, prologue, epilogue, rigPreview, isGirl } from './visit.js';
 
 // ── состояние ─────────────────────────────────────────
 const KEY = 'turanroad.v1';
 const defaults = () => ({
   hero: null, introSeen: false, endingSeen: false, completed: [], pos: 'start', stars: {},
-  settings: { bright: 1, music: 0.6, sfx: 0.8, speed: 'normal' },
+  settings: { bright: 1, music: 0.6, sfx: 0.8, voice: 0.7, speed: 'normal' },
 });
 let S = load();
 function load() {
@@ -25,7 +29,7 @@ const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const shuffle = (a) => { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const reveal = (el) => { if (!el) return; el.focus({ preventScroll: true }); el.scrollIntoView({ block: 'nearest', behavior: reduced() ? 'auto' : 'smooth' }); };
-const fill = (t) => t.replace(/\{name\}/g, esc(S.hero?.name || 'жолаушы'));
+const fill = (t) => t.replace(/\{name\}/g, S.hero?.name || 'жолаушы');
 
 const world = $('#world'), menu = $('#menu'), hud = $('#hud'), overlay = $('#overlay'), portal = $('#portal');
 const map = new MapView($('#map'));
@@ -35,6 +39,7 @@ function applySettings() {
   document.documentElement.style.setProperty('--bright', S.settings.bright);
   audio.setMusicVolume(S.settings.music);
   audio.setSfxVolume(S.settings.sfx);
+  audio.setVoiceVolume?.(S.settings.voice);
 }
 applySettings();
 
@@ -171,6 +176,7 @@ function openSettings() {
       <label class="set-row"><span>Яркость</span><input type="range" id="sBright" min="0.6" max="1.4" step="0.05" value="${s.bright}"><output>${Math.round(s.bright * 100)}%</output></label>
       <label class="set-row"><span>Музыка</span><input type="range" id="sMusic" min="0" max="1" step="0.05" value="${s.music}"><output>${Math.round(s.music * 100)}%</output></label>
       <label class="set-row"><span>Звуки</span><input type="range" id="sSfx" min="0" max="1" step="0.05" value="${s.sfx}"><output>${Math.round(s.sfx * 100)}%</output></label>
+      <label class="set-row"><span>Голоса</span><input type="range" id="sVoice" min="0" max="1" step="0.05" value="${s.voice}"><output>${Math.round(s.voice * 100)}%</output></label>
       <div class="set-row"><span>Скорость текста</span>
         <div class="seg" role="radiogroup">${[['slow', 'Медленно'], ['normal', 'Обычно'], ['fast', 'Быстро'], ['instant', 'Сразу']].map(([v, n]) => `<button role="radio" aria-checked="${s.speed === v}" data-v="${v}">${n}</button>`).join('')}</div>
       </div>
@@ -186,8 +192,10 @@ function openSettings() {
   bind('#sBright', 'bright', applySettings);
   bind('#sMusic', 'music', applySettings);
   bind('#sSfx', 'sfx', () => { applySettings(); audio.sfx.click(); });
+  bind('#sVoice', 'voice', () => { applySettings(); audio.voice?.(170 + Math.random() * 60, 'a'); });
   $$('.seg button', m).forEach((b) => b.addEventListener('click', () => {
     s.speed = b.dataset.v; save(); audio.sfx.page();
+    if (activeStage) activeStage.speed = s.speed;
     $$('.seg button', m).forEach((x) => x.setAttribute('aria-checked', x === b));
   }));
   $('#sDone', m).addEventListener('click', () => { audio.sfx.click(); closeModal(); });
@@ -217,14 +225,17 @@ function openCredits() {
 
 // ── создание героя ────────────────────────────────────
 function openCreate() {
-  const draft = { type: 'batyr', coat: 'tory', name: HERO_TYPES.batyr.defaultName };
+  const draft = { type: 'batyr', coat: 'tory', look: 'm', name: HERO_TYPES.batyr.defaultName };
   const m = openModal(`
     <h2 class="m-title">Кто отправится в путь?</h2>
     <div class="create">
-      <div class="create-preview" id="cPrev"></div>
+      <div class="create-preview" id="cPrev"><svg class="rig-prev" viewBox="0 -20 420 340" aria-hidden="true"></svg></div>
       <div class="create-form">
         <fieldset><legend>Герой</legend>
           <div class="choice" id="cType">${Object.entries(HERO_TYPES).map(([k, h]) => `<button role="radio" data-v="${k}" aria-checked="${k === draft.type}"><b>${h.name}</b><span>${h.about}</span></button>`).join('')}</div>
+        </fieldset>
+        <fieldset><legend>Облик</legend>
+          <div class="seg look" id="cLook" role="radiogroup">${[['m', 'Мальчик'], ['f', 'Девочка']].map(([v, n]) => `<button role="radio" data-v="${v}" aria-checked="${v === draft.look}">${n}</button>`).join('')}</div>
         </fieldset>
         <fieldset><legend>Масть коня</legend>
           <div class="coats" id="cCoat">${Object.entries(COATS).map(([k, c]) => `<button role="radio" data-v="${k}" aria-checked="${k === draft.coat}"><i style="--c:${c.body};--d:${c.dark}"></i><b>${c.name}</b><span>${c.ru}</span></button>`).join('')}</div>
@@ -233,89 +244,62 @@ function openCreate() {
       </div>
     </div>
     <div class="set-foot"><button class="btn big" id="cGo">Отправиться в путь</button></div>`, { cls: 'modal-create', closable: false });
-  const prev = () => { $('#cPrev', m).innerHTML = heroSVG(draft, 'idle'); };
-  prev();
+  const prev = rigPreview($('#cPrev svg', m), draft);
   const nameInp = $('#cName', m);
-  let typedName = false;
+  let typedName = false, pickedLook = false;
+  const radio = (sel, b) => $$(sel + ' button', m).forEach((x) => x.setAttribute('aria-checked', x === b));
   nameInp.addEventListener('input', () => { typedName = true; draft.name = nameInp.value; });
   $$('#cType button', m).forEach((b) => b.addEventListener('click', () => {
     draft.type = b.dataset.v; audio.sfx.page();
-    $$('#cType button', m).forEach((x) => x.setAttribute('aria-checked', x === b));
-    if (!typedName) { draft.name = HERO_TYPES[draft.type].defaultName; nameInp.value = draft.name; }
-    prev();
+    radio('#cType', b);
+    if (!pickedLook) { draft.look = draft.type === 'sayahat' ? 'f' : 'm'; radio('#cLook', $(`#cLook [data-v="${draft.look}"]`, m)); }
+    if (!typedName) { draft.name = draft.look === 'f' && draft.type === 'batyr' ? 'Томирис' : draft.look === 'm' && draft.type === 'sayahat' ? 'Сапар' : HERO_TYPES[draft.type].defaultName; nameInp.value = draft.name; }
+    prev.set(draft);
+  }));
+  $$('#cLook button', m).forEach((b) => b.addEventListener('click', () => {
+    draft.look = b.dataset.v; pickedLook = true; audio.sfx.page();
+    radio('#cLook', b);
+    if (!typedName) { draft.name = draft.look === 'f' && draft.type === 'batyr' ? 'Томирис' : draft.look === 'm' && draft.type === 'sayahat' ? 'Сапар' : HERO_TYPES[draft.type].defaultName; nameInp.value = draft.name; }
+    prev.set(draft);
   }));
   $$('#cCoat button', m).forEach((b) => b.addEventListener('click', () => {
     draft.coat = b.dataset.v; audio.sfx.page();
-    $$('#cCoat button', m).forEach((x) => x.setAttribute('aria-checked', x === b));
-    prev();
+    radio('#cCoat', b);
+    prev.set(draft);
   }));
   $('#cGo', m).addEventListener('click', () => {
     draft.name = (nameInp.value || '').trim() || HERO_TYPES[draft.type].defaultName;
     S.hero = { ...draft }; save();
     audio.sfx.unlock();
+    prev.stop();
     closeModal(); refreshMap();
     runIntro();
   });
 }
 
-// ── диалоги ───────────────────────────────────────────
-const SPEED = { slow: 38, normal: 22, fast: 10, instant: 0 };
-function typeText(el, text) {
-  return new Promise((res) => {
-    const ms = SPEED[S.settings.speed] ?? 22;
-    if (!ms || reduced()) { el.textContent = text; res(); return; }
-    let i = 0, done = false;
-    el.textContent = '';
-    el.classList.add('typing');
-    const finish = () => { if (done) return; done = true; clearInterval(t); el.textContent = text; el.classList.remove('typing'); res(); };
-    const t = setInterval(() => {
-      i += 1; el.textContent = text.slice(0, i);
-      if (i % 3 === 0 && text[i] !== ' ') audio.sfx.hover && i % 9 === 0 && audio.sfx.hover();
-      if (i >= text.length) finish();
-    }, ms);
-    el._skip = finish;
-  });
+// ── окно-сцена: заголовок, живая сцена, панель заданий ──
+let activeStage = null;
+function sceneModal(title, sub, steps, opt = {}) {
+  const m = openModal(`
+    <div class="sc2-top"><div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div>${steps ? `<ol class="steps">${steps.map((s, i) => `<li data-i="${i}">${s}</li>`).join('')}</ol>` : ''}</div>
+    <div class="sc2-stage"></div>
+    <div class="sc2-panel"></div>`, { cls: 'modal-scene2', ...opt });
+  const host = $('.sc2-stage', m), panel = $('.sc2-panel', m);
+  const st = new Stage(host, { kind: opt.kind, tone: opt.tone, speed: S.settings.speed });
+  st.fadeEl.classList.add('on');
+  activeStage = st;
+  new MutationObserver(() => m.classList.toggle('tasking', panel.childElementCount > 0)).observe(panel, { childList: true });
+  return { m, st, host, panel };
 }
-
-function talkHTML(who) {
-  return `<div class="talk">
-    <div class="talk-av">${avatarSVG(who.avatar, who.color)}</div>
-    <div class="talk-bubble"><div class="talk-who"><b>${esc(who.name)}</b><span>${esc(who.role)}</span></div><p class="talk-text" aria-live="polite"></p></div>
-  </div>`;
-}
-
-// показывает реплики по одной; ждёт нажатия «Дальше»
-async function dialog(container, lines, resolveWho, lastLabel = 'Дальше') {
-  for (let i = 0; i < lines.length; i++) {
-    const { who, text } = lines[i];
-    const w = resolveWho(who);
-    container.innerHTML = `${talkHTML(w)}<div class="actions"><button class="btn" data-next>${i === lines.length - 1 ? lastLabel : 'Дальше'}</button></div>`;
-    if (who === 'eagle') audio.sfx.eagle();
-    const p = $('.talk-text', container);
-    const btn = $('[data-next]', container);
-    reveal(btn);
-    let typing = typeText(p, fill(text));
-    await new Promise((res) => {
-      const go = async () => {
-        if (p._skip && p.classList.contains('typing')) { p._skip(); return; }
-        audio.sfx.page(); res();
-      };
-      btn.addEventListener('click', go);
-      $('.talk', container).addEventListener('click', () => p._skip?.());
-    });
-    await typing;
-  }
-}
+const guardOf = (host) => () => { if (!host.isConnected) throw 'closed'; };
+const revealIn = (el, block = 'nearest') => el?.scrollIntoView({ block, behavior: reduced() ? 'auto' : 'smooth' });
 
 async function runIntro() {
-  const m = openModal(`
-    <div class="scene">
-      <div class="scene-art">${sceneSVG('peak', 'day')}</div>
-      <div class="scene-head"><h2>${START.name}</h2><p>Начало пути</p></div>
-      <div class="scene-body" id="sb"></div>
-    </div>`, { cls: 'modal-scene', closable: false });
+  const { st, host } = sceneModal(START.name, 'Начало пути', null, { closable: false, kind: 'kazygurt' });
   music('village');
-  await dialog($('#sb', m), INTRO, (w) => (w === 'eagle' ? EAGLE : GUIDE), 'В путь!');
+  try {
+    await prologue({ st, hero: S.hero, lines: INTRO, guide: GUIDE, fill, guard: guardOf(host) });
+  } catch (e) { if (e !== 'closed') console.error(e); }
   S.introSeen = true; save();
   closeModal();
   music('map');
@@ -338,18 +322,27 @@ map.onSelect = (id) => {
   openDestination(loc);
 };
 
+// неподвижная картинка места из тех же слоёв, что и живая сцена
+function postcard(kind) {
+  const b = backdrop(kind, {});
+  return `<svg class="postcard" viewBox="0 0 ${SW} ${SH}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${b.bg}${b.mid}${b.fg}</svg>`;
+}
+
 function openDestination(loc) {
   const done = S.completed.includes(loc.id);
   const here = S.pos === loc.id;
   const cats = [...new Set(loc.facts.map((f) => f.cat))];
+  const sto = STORY[loc.id];
+  const quest = sto.quest.find((q) => q.type !== 'game');
   const m = openModal(`
     <div class="dest">
-      <div class="dest-art">${sceneSVG(loc.kind, 'day')}${done ? `<div class="dest-tumar">${artifactSVG(loc.artifact.glyph, loc.artifact.color, 64)}</div>` : ''}</div>
+      <div class="dest-art">${postcard(loc.kind)}${done ? `<div class="dest-tumar">${artifactSVG(loc.artifact.glyph, loc.artifact.color, 64)}</div>` : ''}</div>
       <div class="dest-body">
         <h2 class="m-title">${loc.name}</h2>
         <p class="m-sub">${loc.ru !== loc.name ? loc.ru + '. ' : ''}${loc.region}</p>
         <ul class="dest-info">
           <li><span>Тебя встретит</span><b>${esc(loc.npc.name)}, ${esc(loc.npc.role)}</b></li>
+          ${quest ? `<li><span>Задание</span><b>${esc(quest.title)}</b></li>` : ''}
           <li><span>Испытание</span><b>${esc(loc.game.title)}</b>${gameName(loc) !== loc.game.title ? `<em>${gameName(loc)}</em>` : ''}</li>
           <li><span>Узнаешь про</span><div class="chips">${cats.map((c) => `<i style="--cat:${CATS[c].color}">${CATS[c].name}</i>`).join('')}</div></li>
           ${done ? `<li><span>Твой результат</span>${starsHTML(S.stars[loc.id])}</li>` : ''}
@@ -375,204 +368,28 @@ function openDestination(loc) {
   });
 }
 
-// ── прохождение точки ─────────────────────────────────
-const STEPS = ['Знакомство', 'Знания', 'Испытание', 'Вопросы', 'Тұмар-тас'];
-
+// ── прохождение точки: живая сцена ────────────────────
 async function openLocation(loc) {
   const replay = S.completed.includes(loc.id);
-  const m = openModal(`
-    <div class="scene">
-      <div class="scene-art" id="art">${sceneSVG(loc.kind, 'day')}<div class="era" id="era" hidden></div><div class="scene-hero">${heroSVG(S.hero, 'idle')}</div><div class="scene-npc">${avatarSVG(loc.npc.avatar, loc.npc.color)}</div></div>
-      <div class="scene-head">
-        <div><h2>${loc.name}</h2><p>${loc.ru !== loc.name ? loc.ru + '. ' : ''}${loc.region}</p></div>
-        <ol class="steps" id="steps">${STEPS.map((s, i) => `<li data-i="${i}">${s}</li>`).join('')}</ol>
-      </div>
-      <div class="scene-body" id="sb"></div>
-    </div>`, { cls: 'modal-scene', onClose: () => { music('map'); } });
+  const sto = STORY[loc.id];
+  const steps = ['Встреча', 'Исследование', ...sto.quest.map((q) => (q.type === 'game' ? 'Испытание' : 'Задание')), 'Тұмар-тас'];
+  const { m, st, host, panel } = sceneModal(loc.name, `${loc.ru !== loc.name ? loc.ru + '. ' : ''}${loc.region}`, steps, {
+    kind: loc.kind, tone: sto.tone, onClose: () => { music('map'); refreshMap(); portal.classList.remove('on'); portal.hidden = true; },
+  });
   music('village');
-  const sb = $('#sb', m);
-  const setStep = (i) => $$('#steps li', m).forEach((li) => { li.classList.toggle('on', +li.dataset.i === i); li.classList.toggle('past', +li.dataset.i < i); });
-  const npc = loc.npc;
-  const who = (w) => (w === 'eagle' ? EAGLE : npc);
-
+  const setStep = (i) => $$('.steps li', m).forEach((li) => { li.classList.toggle('on', +li.dataset.i === i); li.classList.toggle('past', +li.dataset.i < i); });
+  const ctx = {
+    st, panel, modal: m, loc, sto, hero: S.hero, CATS,
+    alive: () => host.isConnected, guard: guardOf(host), reveal: revealIn,
+    music, playGame, setStep, portalIn: portalFx, portalOut: portalOff,
+    onStars: (n) => { S.stars[loc.id] = Math.max(S.stars[loc.id] || 0, n); save(); },
+  };
   try {
-    // 1. знакомство
-    setStep(0);
-    await dialog(sb, loc.greet.map((t) => ({ who: 'npc', text: t })), who, 'Узнать больше');
-
-    // 2. знания — карточки
-    setStep(1);
-    await explore(sb, loc);
-
-    // 3. экшен-испытание
-    setStep(2);
-    await dialog(sb, [{ who: 'npc', text: loc.game.intro }], who, 'Принять испытание');
-    m.classList.add('gaming');
-    music('menu');
-    const res = await playGame(sb, loc.game, { hero: S.hero });
-    guardOpen(sb);
-    m.classList.remove('gaming');
-    music('village');
-    if (res.win) { S.stars[loc.id] = Math.max(S.stars[loc.id] || 0, res.stars); save(); }
-
-    // 4. вопросы
-    setStep(3);
-    await dialog(sb, [{ who: 'npc', text: res.win ? 'Вот это ловкость! А теперь проверим, что ты запомнил.' : 'Ничего, в следующий раз получится! А теперь проверим, что ты запомнил.' }], who, 'К вопросам');
-    const tasks = pickTasks(loc.mission.tasks);
-    for (let i = 0; i < tasks.length; i++) await runTask(sb, tasks[i], i, tasks.length);
-
-    // 5. камень памяти и путешествие во времени
-    setStep(4);
-    await stoneStep(sb, loc);
-    await timeTravel(m, sb, loc);
-    await reward(sb, loc, replay);
+    await visit(ctx);
+    reward(panel, loc, replay);
   } catch (e) {
     if (e !== 'closed') console.error(e);
   }
-}
-
-function guardOpen(sb) { if (!document.body.contains(sb)) throw 'closed'; }
-
-// два вопроса: один обычный и один «действием» (порядок или выбор нескольких)
-function pickTasks(tasks) {
-  const q = tasks.find((t) => t.type === 'quiz');
-  const other = tasks.find((t) => t.type !== 'quiz');
-  return other ? [q, other] : tasks.slice(0, 2);
-}
-
-function explore(sb, loc) {
-  return new Promise((res) => {
-    const opened = new Set();
-    sb.innerHTML = `
-      <p class="lead">Нажми на каждую карточку, чтобы узнать, чем знаменито это место.</p>
-      <div class="facts">${loc.facts.map((fct, i) => {
-        const c = CATS[fct.cat];
-        return `<button class="fact" data-i="${i}" style="--cat:${c.color}" aria-expanded="false">
-          <span class="fact-cat">${c.name}</span><b class="fact-title">${fct.title}</b>
-          <span class="fact-text">${fct.text}</span></button>`;
-      }).join('')}</div>
-      <div class="actions"><span class="counter" id="fc">Открыто 0 из ${loc.facts.length}</span><button class="btn" id="fNext" disabled>К заданию</button></div>`;
-    $$('.fact', sb).forEach((b) => b.addEventListener('click', () => {
-      const open = b.getAttribute('aria-expanded') === 'true';
-      b.setAttribute('aria-expanded', !open);
-      if (!open) audio.sfx.page();
-      opened.add(b.dataset.i);
-      $('#fc', sb).textContent = `Открыто ${opened.size} из ${loc.facts.length}`;
-      if (opened.size === loc.facts.length) { $('#fNext', sb).disabled = false; $('#fNext', sb).classList.add('ready'); }
-    }));
-    $('#fNext', sb).addEventListener('click', () => { audio.sfx.click(); res(); });
-  });
-}
-
-function hintBox(text) {
-  return `<div class="hint" role="status"><div class="hint-av">${avatarSVG('eagle')}</div><p><b>Қыран подсказывает:</b> ${esc(text)}</p></div>`;
-}
-
-function runTask(sb, task, idx, total) {
-  return new Promise((res) => {
-    const head = `<p class="task-n">Вопрос ${idx + 1} из ${total}</p><h3 class="task-q">${esc(task.q)}</h3>`;
-    const success = (msg = 'Верно! Так и есть.') => {
-      audio.sfx.correct();
-      $('.task-feedback', sb).innerHTML = `<p class="ok">${msg}</p>`;
-      const a = $('.actions', sb);
-      a.innerHTML = `<button class="btn ready" id="tNext">${idx === total - 1 ? 'Готово!' : 'Следующий вопрос'}</button>`;
-      reveal($('#tNext', sb));
-      $('#tNext', sb).addEventListener('click', () => { audio.sfx.click(); res(); });
-    };
-    const fail = () => {
-      audio.sfx.wrong();
-      sb.querySelector('.task').classList.remove('shake'); void sb.offsetWidth; sb.querySelector('.task').classList.add('shake');
-      $('.task-feedback', sb).innerHTML = hintBox(task.hint);
-    };
-
-    if (task.type === 'quiz') {
-      const opts = shuffle(task.options.map((t, i) => ({ t, ok: i === task.answer })));
-      sb.innerHTML = `<div class="task">${head}<div class="opts">${opts.map((o, i) => `<button class="opt" data-i="${i}">${esc(o.t)}</button>`).join('')}</div><div class="task-feedback"></div></div><div class="actions"></div>`;
-      $$('.opt', sb).forEach((b) => b.addEventListener('click', () => {
-        if (b.disabled) return;
-        const o = opts[+b.dataset.i];
-        if (o.ok) { $$('.opt', sb).forEach((x) => (x.disabled = true)); b.classList.add('right'); success(); }
-        else { b.classList.add('wrong'); b.disabled = true; fail(); }
-      }));
-    }
-
-    if (task.type === 'pick') {
-      const opts = shuffle(task.options.map((t, i) => ({ t, ok: task.correct.includes(i) })));
-      sb.innerHTML = `<div class="task">${head}<div class="opts pick">${opts.map((o, i) => `<button class="opt" role="checkbox" aria-checked="false" data-i="${i}"><i></i>${esc(o.t)}</button>`).join('')}</div><div class="task-feedback"></div></div><div class="actions"><button class="btn" id="tCheck">Проверить</button></div>`;
-      $$('.opt', sb).forEach((b) => b.addEventListener('click', () => { if (b.disabled) return; audio.sfx.page(); b.setAttribute('aria-checked', b.getAttribute('aria-checked') !== 'true'); }));
-      $('#tCheck', sb).addEventListener('click', () => {
-        const btns = $$('.opt', sb);
-        const ok = btns.every((b) => (b.getAttribute('aria-checked') === 'true') === opts[+b.dataset.i].ok);
-        if (ok) { btns.forEach((b) => { b.disabled = true; if (opts[+b.dataset.i].ok) b.classList.add('right'); }); success('Всё верно — ты ничего не упустил!'); }
-        else fail();
-      });
-    }
-
-    if (task.type === 'order') {
-      const items = shuffle(task.items.map((t, i) => ({ t, i })));
-      let seq = [];
-      sb.innerHTML = `<div class="task">${head}<p class="lead">Нажимай на события по порядку.</p>
-        <ol class="seq" id="seq"></ol>
-        <div class="opts">${items.map((o, k) => `<button class="opt" data-k="${k}">${esc(o.t)}</button>`).join('')}</div>
-        <div class="task-feedback"></div></div>
-        <div class="actions"><button class="btn ghost" id="tClear">Сбросить</button></div>`;
-      const draw = () => {
-        $('#seq', sb).innerHTML = seq.map((k) => `<li>${esc(items[k].t)}</li>`).join('') || '<li class="empty">Здесь появится твоя цепочка событий</li>';
-        $$('.opt', sb).forEach((b) => (b.disabled = seq.includes(+b.dataset.k)));
-      };
-      draw();
-      $$('.opt', sb).forEach((b) => b.addEventListener('click', () => {
-        if (b.disabled) return;
-        audio.sfx.page();
-        seq.push(+b.dataset.k); draw();
-        if (seq.length === items.length) {
-          const ok = seq.every((k, pos) => items[k].i === pos);
-          if (ok) success('Правильно! История сложилась.');
-          else { fail(); setTimeout(() => { seq = []; draw(); }, 900); }
-        }
-      }));
-      $('#tClear', sb).addEventListener('click', () => { seq = []; draw(); audio.sfx.page(); });
-    }
-  });
-}
-
-function stoneStep(sb, loc) {
-  return new Promise((res) => {
-    sb.innerHTML = `
-      ${talkHTML(loc.npc)}
-      <div class="stone-wrap"><button class="stone-btn" id="stone" aria-label="Зажми, чтобы зарядить камень памяти">${stoneSVG(loc.artifact.color)}<span class="stone-ring"></span></button>
-      <p class="lead center">Зажми тұмар-тас и держи, пока он не наполнится светом.</p></div>`;
-    typeText($('.talk-text', sb), 'Рахмет! Смотри — камень памяти откликнулся на твои знания. Он покажет тебе прошлое.');
-    audio.sfx.chime();
-    const btn = $('#stone', sb);
-    reveal(btn);
-    let p = 0, holding = false, last = performance.now(), done = false, hum = 0;
-    const set = (v) => { holding = v; if (v) audio.sfx.hum(); };
-    btn.addEventListener('pointerdown', (e) => { e.preventDefault(); btn.setPointerCapture?.(e.pointerId); set(true); });
-    ['pointerup', 'pointercancel'].forEach((ev) => btn.addEventListener(ev, () => set(false)));
-    btn.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); set(true); } });
-    btn.addEventListener('keyup', (e) => { if (e.key === 'Enter' || e.key === ' ') set(false); });
-    const tick = (now) => {
-      if (!document.body.contains(btn)) return;
-      const dt = Math.min(0.25, (now - last) / 1000); last = now;
-      p = holding ? Math.min(1, p + dt / 1.0) : Math.max(0, p - dt * 1.2);
-      btn.style.setProperty('--p', p.toFixed(3));
-      btn.classList.toggle('charging', holding);
-      if (holding && (hum += dt) > 0.3) { hum = 0; sparkle(btn, loc.artifact.color); }
-      if (p >= 1 && !done) { done = true; btn.classList.add('full'); setTimeout(res, 350); return; }
-      requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  });
-}
-
-function sparkle(el, color) {
-  const s = document.createElement('i');
-  s.className = 'spark';
-  const a = Math.random() * Math.PI * 2;
-  s.style.cssText = `--dx:${Math.cos(a) * 110}px;--dy:${Math.sin(a) * 80 - 20}px;background:${color}`;
-  el.appendChild(s);
-  s.addEventListener('animationend', () => s.remove());
 }
 
 async function portalFx() {
@@ -587,108 +404,43 @@ async function portalOff() {
   portal.hidden = true;
 }
 
-async function timeTravel(m, sb, loc) {
-  guardOpen(sb);
-  await portalFx();
-  music('time');
-  const tm = loc.time;
-  const tone = tm.tone || 'past';
-  const art = $('#art', m);
-  art.firstElementChild.outerHTML = sceneSVG(tm.kind, tone, { scaffold: tm.scaffold });
-  art.classList.add('past');
-  const era = $('#era', m); era.hidden = false; era.textContent = tm.era;
-  await portalOff();
-
-  for (let i = 0; i < tm.steps.length; i++) {
-    guardOpen(sb);
-    const step = tm.steps[i];
-    const last = i === tm.steps.length - 1;
-    await new Promise((res) => {
-      sb.innerHTML = `<div class="time-step"><p class="time-text"></p>
-        ${step.choices ? `<div class="opts">${step.choices.map((c, k) => `<button class="opt" data-k="${k}">${esc(c.label)}</button>`).join('')}</div><div class="time-reply"></div>` : ''}</div>
-        <div class="actions"><button class="btn" id="tGo" ${step.choices ? 'hidden' : ''}>${last ? 'Вернуться в своё время' : 'Дальше'}</button></div>`;
-      const p = $('.time-text', sb);
-      typeText(p, step.text);
-      const go = $('#tGo', sb);
-      const art = $('#art', m);
-      $$('.hot', art).forEach((h) => h.remove());
-      if (step.choices) {
-        const HOT = [[26, 58], [70, 44]];
-        step.choices.forEach((c, k) => {
-          const h = document.createElement('button');
-          h.className = 'hot'; h.dataset.k = k;
-          h.style.left = HOT[k % 2][0] + '%'; h.style.top = HOT[k % 2][1] + '%';
-          h.innerHTML = `<span>${esc(c.label)}</span>`;
-          h.setAttribute('aria-label', c.label);
-          art.appendChild(h);
-        });
-        const choose = (k) => {
-          p._skip?.();
-          audio.sfx.page();
-          $$('.opt', sb).forEach((x) => { x.disabled = true; x.classList.toggle('chosen', +x.dataset.k === k); });
-          $$('.hot', art).forEach((h) => { h.disabled = true; h.classList.toggle('chosen', +h.dataset.k === k); });
-          const r = $('.time-reply', sb);
-          typeText(r, step.choices[k].reply);
-          go.hidden = false; reveal(go);
-        };
-        $$('.opt', sb).forEach((b) => b.addEventListener('click', () => { if (!b.disabled) choose(+b.dataset.k); }));
-        $$('.hot', art).forEach((h) => h.addEventListener('click', () => { if (!h.disabled) choose(+h.dataset.k); }));
-      } else reveal(go);
-      go.addEventListener('click', () => { audio.sfx.click(); res(); });
-    });
-  }
-  guardOpen(sb);
-  $$('.hot', art).forEach((h) => h.remove());
-  await portalFx();
-  art.classList.remove('past');
-  art.firstElementChild.outerHTML = sceneSVG(loc.kind, 'day');
-  $('#era', m).hidden = true;
-  music('village');
-  await portalOff();
-}
-
-function reward(sb, loc, replay) {
-  return new Promise((res) => {
-    const firstUnlock = !replay && loc.id === LOCS[0].id;
-    if (!replay) S.completed.push(loc.id);
-    const left = LOCS.length - S.completed.length;
-    save();
-    audio.sfx.chime();
-    const all = S.completed.length === LOCS.length;
-    sb.innerHTML = `
-      <div class="reward">
-        <div class="reward-art">${artifactSVG(loc.artifact.glyph, loc.artifact.color, 120)}</div>
-        <div><p class="task-n">${replay ? 'Этот камень уже в твоём қоржыне' : 'Новый тұмар в твоём қоржыне!'}</p>
-        <h3 class="reward-name">${loc.artifact.name}</h3><p>${loc.artifact.desc}</p>
-        ${S.stars[loc.id] ? `<p>Испытание: ${starsHTML(S.stars[loc.id])}</p>` : ''}
-        ${firstUnlock ? '<p class="unlock"><b>Вся степь открыта!</b> Теперь ты сам выбираешь, куда скакать дальше: в горы Алтая, к Аральскому морю или к поющему бархану.</p>' : !replay && left ? `<p class="unlock">Осталось камней: <b>${left}</b>. Выбирай на карте любую точку.</p>` : ''}</div>
-      </div>
-      <div class="actions"><button class="btn big ready" id="rGo">${all && !S.endingSeen ? 'Завершить путь' : 'В путь!'}</button></div>`;
-    reveal($('#rGo', sb));
-    $('#rGo', sb).addEventListener('click', async () => {
-      audio.sfx.unlock();
-      closeModal();
-      music('map');
-      refreshMap();
-      if (firstUnlock) {
-        toast('Все дороги открыты! Выбирай любую точку на карте.');
-        map.overview(1600);
-      }
-      if (all && !S.endingSeen) runEnding();
-      res();
-    });
+function reward(panel, loc, replay) {
+  const firstUnlock = !replay && loc.id === LOCS[0].id;
+  if (!replay) S.completed.push(loc.id);
+  const left = LOCS.length - S.completed.length;
+  save();
+  audio.sfx.chime();
+  const all = S.completed.length === LOCS.length;
+  panel.innerHTML = `
+    <div class="reward">
+      <div class="reward-art">${artifactSVG(loc.artifact.glyph, loc.artifact.color, 120)}</div>
+      <div><p class="task-n">${replay ? 'Этот камень уже в твоём қоржыне' : 'Новый тұмар в твоём қоржыне!'}</p>
+      <h3 class="reward-name">${loc.artifact.name}</h3><p>${loc.artifact.desc}</p>
+      ${S.stars[loc.id] ? `<p>Испытание: ${starsHTML(S.stars[loc.id])}</p>` : ''}
+      ${firstUnlock ? '<p class="unlock"><b>Вся степь открыта!</b> Теперь ты сам выбираешь, куда скакать дальше: в горы Алтая, к Аральскому морю или к поющему бархану.</p>' : !replay && left ? `<p class="unlock">Осталось камней: <b>${left}</b>. Выбирай на карте любую точку.</p>` : ''}</div>
+    </div>
+    <div class="actions"><button class="btn big ready" id="rGo">${all && !S.endingSeen ? 'Завершить путь' : 'В путь!'}</button></div>`;
+  revealIn($('#rGo', panel));
+  $('#rGo', panel).focus({ preventScroll: true });
+  $('#rGo', panel).addEventListener('click', () => {
+    audio.sfx.unlock();
+    closeModal();
+    music('map');
+    refreshMap();
+    if (firstUnlock) {
+      toast('Все дороги открыты! Выбирай любую точку на карте.');
+      map.overview(1600);
+    }
+    if (all && !S.endingSeen) runEnding();
   });
 }
 
 async function runEnding() {
-  const m = openModal(`
-    <div class="scene">
-      <div class="scene-art">${sceneSVG('camp', 'night')}</div>
-      <div class="scene-head"><h2>Тұран жолы пройден</h2><p>Все тринадцать камней собраны</p></div>
-      <div class="scene-body" id="sb"></div>
-    </div>`, { cls: 'modal-scene', closable: false });
+  const { st, host } = sceneModal('Тұран жолы пройден', 'Все тринадцать камней собраны', null, { closable: false, kind: 'camp', tone: 'night' });
   music('menu');
-  await dialog($('#sb', m), ENDING, (w) => (w === 'eagle' ? EAGLE : GUIDE), 'Открыть журнал');
+  try {
+    await epilogue({ st, hero: S.hero, lines: ENDING, guide: GUIDE, fill, guard: guardOf(host) });
+  } catch (e) { if (e !== 'closed') console.error(e); }
   S.endingSeen = true; save();
   closeModal(); music('map');
   openJournal();
@@ -725,4 +477,4 @@ function openJournal(selectId) {
 }
 
 // для отладки в консоли
-window.__turan = { S, LOCS, map };
+window.__turan = { get S() { return S; }, get stage() { return activeStage; }, LOCS, map, STORY, openLocation, runIntro, runEnding };

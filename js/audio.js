@@ -366,3 +366,99 @@ export function duck(on) {
   musicBus.gain.cancelScheduledValues(ctx.currentTime);
   musicBus.gain.setTargetAtTime(on ? 0.0001 : st.music * 0.55, ctx.currentTime, 0.2);
 }
+
+// ── голоса персонажей ──────────────────────────────────
+// Каждый слог — короткий «звук» с формантами гласной: так речь
+// звучит как в мультфильмах, а высота голоса у каждого своя.
+const FORM = { a: [820, 1250], o: [520, 880], u: [360, 720], i: [300, 2300], e: [480, 1850] };
+let voiceVol = 0.6;
+export function setVoiceVolume(v) { voiceVol = v; }
+export function voice(pitch = 160, vowel = 'a', bird = false) {
+  if (!ctx || voiceVol <= 0 || ctx.state !== 'running') return;
+  const t = ctx.currentTime + 0.005;
+  const dur = bird ? 0.07 : 0.085;
+  const o = ctx.createOscillator();
+  o.type = bird ? 'triangle' : 'sawtooth';
+  o.frequency.setValueAtTime(pitch * 1.06, t);
+  o.frequency.exponentialRampToValueAtTime(pitch * (bird ? 1.3 : 0.94), t + dur);
+  const out = ctx.createGain();
+  out.gain.setValueAtTime(0.0001, t);
+  out.gain.exponentialRampToValueAtTime(voiceVol * (bird ? 0.05 : 0.11), t + 0.012);
+  out.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  const [f1, f2] = FORM[vowel] || FORM.a;
+  [f1, f2].forEach((fr, i) => {
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = bird ? fr * 2 : fr; bp.Q.value = 6;
+    const g = ctx.createGain(); g.gain.value = i ? 0.6 : 1;
+    o.connect(bp); bp.connect(g); g.connect(out);
+  });
+  out.connect(sfxBus);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+
+// ── звуки места ────────────────────────────────────────
+let amb = null;
+export function ambience(modes = [], kind = '') {
+  if (amb) { const a = amb; amb = null; try { a.gain.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.3); } catch (e) { /* */ } setTimeout(() => { a.stop(); }, 900); }
+  if (!ctx || !modes || !modes.length && !kind) return;
+  const gain = ctx.createGain(); gain.gain.value = 0.0001; gain.connect(sfxBus);
+  gain.gain.setTargetAtTime(1, ctx.currentTime, 0.6);
+  const nodes = [], timers = [];
+  const noise = () => { const n = ctx.createBufferSource(); n.buffer = noiseBuf; n.loop = true; n.start(); nodes.push(n); return n; };
+  const has = (m) => modes.includes(m);
+  const windy = has('wind') || has('sand') || has('salt') || has('dust') || has('snow') || has('tumble');
+  if (windy) {
+    const n = noise(), bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 420; bp.Q.value = 0.7;
+    const g = ctx.createGain(); g.gain.value = 0.05;
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 0.13; const lg = ctx.createGain(); lg.gain.value = 0.035;
+    lfo.connect(lg); lg.connect(g.gain); lfo.start(); nodes.push(lfo);
+    const lfo2 = ctx.createOscillator(); lfo2.frequency.value = 0.07; const lg2 = ctx.createGain(); lg2.gain.value = 220;
+    lfo2.connect(lg2); lg2.connect(bp.frequency); lfo2.start(); nodes.push(lfo2);
+    n.connect(bp); bp.connect(g); g.connect(gain);
+  }
+  if (has('rain')) {
+    const n = noise(), hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 900;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 6000;
+    const g = ctx.createGain(); g.gain.value = 0.07; n.connect(hp); hp.connect(lp); lp.connect(g); g.connect(gain);
+  }
+  if (['lake', 'port', 'island', 'pinelake', 'ocean'].includes(kind) || has('spray') || has('bubbles')) {
+    const n = noise(), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = kind === 'ocean' ? 300 : 520;
+    const g = ctx.createGain(); g.gain.value = 0.03;
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 0.18; const lg = ctx.createGain(); lg.gain.value = 0.028;
+    lfo.connect(lg); lg.connect(g.gain); lfo.start(); nodes.push(lfo);
+    n.connect(lp); lp.connect(g); g.connect(gain);
+  }
+  if (has('embers')) {
+    timers.push(setInterval(() => {
+      if (!amb || Math.random() < 0.4) return;
+      const t = ctx.currentTime, n = ctx.createBufferSource(); n.buffer = noiseBuf;
+      const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.06 + Math.random() * 0.06, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+      n.connect(hp); hp.connect(g); g.connect(gain); n.start(t, Math.random() * 0.5); n.stop(t + 0.05);
+    }, 140));
+  }
+  if (has('fireflies')) {
+    timers.push(setInterval(() => {
+      if (!amb) return;
+      const t = ctx.currentTime;
+      for (let i = 0; i < 3; i++) {
+        const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = 4300 + Math.random() * 300;
+        const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t + i * 0.06); g.gain.exponentialRampToValueAtTime(0.012, t + i * 0.06 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.06 + 0.04);
+        o.connect(g); g.connect(gain); o.start(t + i * 0.06); o.stop(t + i * 0.06 + 0.05);
+      }
+    }, 900));
+  }
+  if (!has('rain') && !has('fireflies') && !has('bubbles') && kind !== 'ocean') {
+    timers.push(setInterval(() => {
+      if (!amb || Math.random() < 0.55) return;
+      const t = ctx.currentTime, base = 2600 + Math.random() * 1400;
+      for (let i = 0; i < 2 + Math.floor(Math.random() * 3); i++) {
+        const o = ctx.createOscillator(); o.type = 'sine';
+        const tt = t + i * 0.12;
+        o.frequency.setValueAtTime(base, tt); o.frequency.exponentialRampToValueAtTime(base * (1.2 + Math.random() * 0.3), tt + 0.07);
+        const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, tt); g.gain.exponentialRampToValueAtTime(0.018, tt + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, tt + 0.09);
+        o.connect(g); g.connect(gain); o.start(tt); o.stop(tt + 0.1);
+      }
+    }, 2200));
+  }
+  amb = { gain, stop: () => { nodes.forEach((n) => { try { n.stop(); } catch (e) { /* */ } }); timers.forEach(clearInterval); gain.disconnect(); } };
+}

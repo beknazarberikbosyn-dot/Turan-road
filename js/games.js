@@ -54,6 +54,7 @@ export function playGame(host, spec, ctx = {}) {
       inner.className = 'game-inner';
       stage.tabIndex = -1; stage.focus({ preventScroll: true });
       session = makeSession();
+      window.__turanGame = session.api;
       audio.sfx.click();
       GAMES[spec.type](session.api, spec, ctx);
     };

@@ -11,9 +11,10 @@ export const HERO_TYPES = {
   sayahat: { name: 'Жиһанкез', about: 'Путешественник в бөріке, с домброй за спиной. Любопытный и весёлый.', defaultName: 'Сапаргүл' },
 };
 
-export function heroMarkup({ type = 'batyr', coat = 'tory' } = {}) {
+export function heroMarkup({ type = 'batyr', coat = 'tory', look } = {}) {
   const c = COATS[coat] || COATS.tory;
   const isBatyr = type === 'batyr';
+  const girl = look ? look === 'f' : !isBatyr;
   const coatColor = isBatyr ? '#3A5BA6' : '#B8382C';
   const trim = '#E7A93B';
   const skin = '#E3B288';
@@ -84,6 +85,7 @@ export function heroMarkup({ type = 'batyr', coat = 'tory' } = {}) {
         <path d="M62,31 Q70,36 77,39" stroke="${coatColor}" stroke-width="5.5" fill="none" stroke-linecap="round"/>
         <circle cx="77.5" cy="39.5" r="2.6" fill="${skin}"/>
         <path d="M78,39 L96,31" stroke="#3A2418" stroke-width=".9"/>
+        ${girl ? `<path d="M52.5,19 Q50,30 52,40 M55,21 Q53.5,31 55.5,40" stroke="#24150D" stroke-width="1.8" fill="none" stroke-linecap="round"/><circle cx="52" cy="41" r="1.3" fill="#C3CAD2"/><circle cx="55.5" cy="41" r="1.3" fill="#C3CAD2"/>` : ''}
         <circle cx="58" cy="19.5" r="7" fill="${skin}"/>
         <circle cx="61.6" cy="19" r="1" fill="#2B1A12"/>
         <path d="M60,23 Q62,24 63.5,22.6" stroke="#8C4A2E" stroke-width=".8" fill="none"/>
