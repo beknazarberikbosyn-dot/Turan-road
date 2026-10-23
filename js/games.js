@@ -2,6 +2,7 @@
 import * as audio from './audio.js';
 import { heroMarkup } from './hero.js';
 import { beast, beastName, eagle, fish, trash, item, ITEM_NAMES } from './sprites.js';
+import { girih, caravan, grove } from './games2.js';
 
 export const GW = 600, GH = 320;
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -14,6 +15,7 @@ export const GAME_NAMES = {
   tiles: 'Мозаика', dig: 'Раскопки', runner: 'Скачка', trace: 'Петроглиф', dress: 'Золотой наряд',
   catcher: 'Ловкие руки', snap: 'Охота с фотоаппаратом', fish: 'Рыбалка', flight: 'Полёт беркута',
   archery: 'Стрельба из лука', rhythm: 'Ритм домбры', dam: 'Плотина',
+  girih: 'Орнамент', caravan: 'Караван', grove: 'Посадка рощи',
 };
 
 // ── оболочка ──────────────────────────────────────────
@@ -41,7 +43,7 @@ export function playGame(host, spec, ctx = {}) {
       stage.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     };
 
-    const BG = { tiles: 'g-felt', dig: spec.skin === 'chalk' ? 'g-chalkbed' : 'g-sandbed', runner: 'g-runbg', trace: 'g-rock', dress: 'g-tent', catcher: 'g-canyonbg', snap: spec.mode === 'fish' ? 'g-lakebg' : 'g-safaribg', flight: 'g-skybg', archery: 'g-lakebg2', rhythm: 'g-yurtbg', dam: 'g-aralbg' };
+    const BG = { tiles: 'g-felt', dig: spec.skin === 'chalk' ? 'g-chalkbed' : 'g-sandbed', runner: 'g-runbg', trace: 'g-rock', dress: 'g-tent', catcher: 'g-canyonbg', snap: spec.mode === 'fish' ? 'g-lakebg' : 'g-safaribg', flight: 'g-skybg', archery: 'g-lakebg2', rhythm: 'g-yurtbg', dam: 'g-aralbg', girih: 'g-tilebg', caravan: 'g-caravanbg', grove: 'g-grovebg' };
     const intro = () => {
       inner.className = 'game-inner ' + BG[spec.type];
       coverBox(`<h4>${spec.title}</h4><p>${spec.how}</p>${spec.keys ? `<p class="gc-keys">${spec.keys}</p>` : ''}
@@ -125,6 +127,10 @@ export function playGame(host, spec, ctx = {}) {
         },
         float(x, y, text, color = '#fff') {
           const p = api.add(text, 'g-float');
+          // длинные подсказки переносим, а всю надпись держим внутри сцены
+          let w = p.offsetWidth;
+          if (w > 360) { p.style.whiteSpace = 'normal'; p.style.width = '360px'; p.style.textAlign = 'center'; w = 360; }
+          x = Math.max(w / 2 + 6, Math.min(GW - w / 2 - 6, x)); y = Math.max(16, y);
           p.style.cssText += `left:${x}px;top:${y}px;color:${color}`;
           p.addEventListener('animationend', () => p.remove());
         },
@@ -204,7 +210,7 @@ function dig(api, spec) {
   const spots = [];
   for (const k of kinds) {
     let p, tries = 0;
-    do { p = { x: rnd(50, 550), y: rnd(50, 270) }; tries++; } while (tries < 200 && spots.some((s) => Math.hypot(s.x - p.x, s.y - p.y) < 90));
+    do { p = { x: rnd(50, 550), y: rnd(50, 270) }; tries++; } while (tries < 200 && (spots.some((s) => Math.hypot(s.x - p.x, s.y - p.y) < 90) || (p.x > 380 && p.y > 228)));
     spots.push({ ...p, kind: k, found: false });
   }
   spots.forEach((s) => {
@@ -228,12 +234,24 @@ function dig(api, spec) {
     c.fillStyle = chalk ? `rgba(160,140,110,${rnd(0.1, 0.35)})` : `rgba(140,96,48,${rnd(0.1, 0.35)})`;
     c.fillRect(rnd(0, GW), rnd(0, GH), rnd(1, 3), rnd(1, 3));
   }
+  // сетка раскопа: шнуры, колышки, масштаб
+  api.add(`<svg viewBox="0 0 600 320" width="600" height="320" aria-hidden="true"><g stroke="${chalk ? '#9C8A6A' : '#F4EFE4'}" stroke-width="1.2" opacity=".75">${[100, 200, 300, 400, 500].map((x) => `<path d="M${x},0 V320"/>`).join('')}${[106, 212].map((y) => `<path d="M0,${y} H600"/>`).join('')}</g>
+    ${[100, 200, 300, 400, 500].map((x) => `<rect x="${x - 3}" y="0" width="6" height="12" fill="#C0504A"/><rect x="${x - 3}" y="308" width="6" height="12" fill="#C0504A"/>`).join('')}
+    <g transform="translate(14,296)"><rect width="100" height="8" fill="#fff"/><rect width="25" height="8" fill="#2B2350"/><rect x="50" width="25" height="8" fill="#2B2350"/><text x="104" y="8" class="g-scale">1 м</text></g>
+    <g transform="translate(570,40)"><path d="M0,-18 L7,6 L0,1 L-7,6Z" fill="#2B2350"/><text y="20" class="g-scale" text-anchor="middle">С</text></g></svg>`, 'g-grid');
+  const TOOLS = chalk ? ['Молоток', 'Кисть'] : ['Кетпен', 'Кисть'];
+  let tool = 0;
+  const tools = api.add(TOOLS.map((n, i) => `<button data-t="${i}" class="${i ? '' : 'on'}"><svg viewBox="0 0 32 32" width="26" height="26">${i ? '<rect x="13" y="2" width="6" height="18" rx="2" fill="#9C6A3A"/><path d="M10,20 H22 L23,30 H9Z" fill="#D8C9A8" stroke="#7A6A4E"/>' : chalk ? '<rect x="14" y="10" width="5" height="20" rx="2" fill="#9C6A3A"/><path d="M5,6 H27 V12 H5Z" fill="#7C858F" stroke="#4E555C"/>' : '<rect x="14" y="2" width="5" height="16" rx="2" fill="#9C6A3A"/><path d="M8,18 H25 L22,30 H11Z" fill="#AEB6BF" stroke="#5E666E"/>'}</svg>${n}</button>`).join(''), 'g-tools');
+  api.put(tools, 410, 270);
   const brush = api.add('', 'g-brush');
   const CS = 10, cols = GW / CS, rows = GH / CS;
   const cleared = new Uint8Array(cols * rows);
-  let last = null, down = false, found = 0, left = T;
-  const R = 26;
-  const upd = () => api.hud(`Найдено <b>${found}/${kinds.length}</b> <span class="g-time">${Math.ceil(left)} с</span>`);
+  let last = null, down = false, found = 0, left = T, cracked = 0;
+  let R = 32;
+  const setTool = (i) => { tool = i; R = i ? 17 : 32; brush.classList.toggle('small', !!i); tools.querySelectorAll('button').forEach((b) => b.classList.toggle('on', +b.dataset.t === i)); audio.sfx.click(); };
+  tools.querySelectorAll('button').forEach((b) => api.on(b, 'click', (e) => { e.stopPropagation(); setTool(+b.dataset.t); }));
+  api.on(window, 'keydown', (e) => { if (e.code === 'Digit1') setTool(0); if (e.code === 'Digit2') setTool(1); });
+  const upd = () => api.hud(`Найдено <b>${found}/${kinds.length}</b>${cracked ? ` · трещин: <b>${cracked}</b>` : ''} <span class="g-time">${Math.ceil(left)} с</span>`);
   upd();
   const scrape = (p) => {
     c.globalCompositeOperation = 'destination-out';
@@ -265,22 +283,32 @@ function dig(api, spec) {
           tot++; ok += cleared[gy * cols + gx];
         }
       }
-      if (ok / tot > 0.62) {
+      const ratio = ok / tot;
+      // край находки проступает из грунта — пора взять кисть
+      if (ratio > 0.16 && !s.hint) { s.hint = api.add('', 'g-hintring'); api.put(s.hint, s.x - 30, s.y - 30); s.hintT = performance.now(); }
+      // кетпен ломает находку, только если её край уже был виден — предупреждение не заметили
+      if (tool === 0 && s.hint && performance.now() - s.hintT > 350 && !s.cracked && Math.hypot(p.x - s.x, p.y - s.y) < 30) {
+        s.cracked = true; cracked++; upd();
+        s.el.classList.add('cracked'); audio.sfx.hit();
+        api.float(s.x, s.y - 40, chalk ? 'Трещина! Рядом с находкой — только кисть' : 'Ой, скол! Рядом с находкой — только кисть', '#FFF8DE');
+      }
+      if (ratio > 0.62) {
         s.found = true; found++; upd();
-        s.el.classList.add('found');
+        s.el.classList.add('found'); s.hint?.remove();
         audio.sfx.pop();
         api.burst(s.x, s.y, '#FFE7A3', 12);
-        api.float(s.x, s.y - 34, ITEM_NAMES[s.kind] || '', '#2B2350');
+        const tag = api.add(`№${found} ${ITEM_NAMES[s.kind] || ''}`, 'g-tag'); api.put(tag, s.x + 22, s.y + 14);
         if (found === kinds.length) {
-          api.later(() => api.win(left > T * 0.5 ? 3 : left > T * 0.25 ? 2 : 1, chalk ? 'Все окаменелости найдены! Им около ста миллионов лет.' : 'Все находки на месте. Отрар рассказал тебе свою историю.'), 700);
+          const st = cracked === 0 ? (left > T * 0.35 ? 3 : 2) : cracked === 1 ? 2 : 1;
+          api.later(() => api.win(st, (chalk ? 'Все окаменелости найдены! Им около ста миллионов лет.' : 'Все находки на месте. Отрар рассказал тебе свою историю.') + (cracked ? ` Повреждено находок: ${cracked} — в следующий раз бери кисть раньше.` : ' И ни одной трещины — работа настоящего археолога!')), 700);
         }
       }
     }
   };
-  api.on(api.inner, 'pointerdown', (e) => { down = true; last = null; api.inner.setPointerCapture?.(e.pointerId); scrape(api.pt(e)); });
+  api.on(api.inner, 'pointerdown', (e) => { if (e.target.closest('.g-tools')) return; down = true; last = null; api.inner.setPointerCapture?.(e.pointerId); scrape(api.pt(e)); });
   api.on(api.inner, 'pointermove', (e) => {
     const p = api.pt(e);
-    api.put(brush, p.x - 24, p.y - 24);
+    api.put(brush, p.x - R, p.y - R);
     if (down) scrape(p);
   });
   const up = () => { down = false; last = null; };
@@ -288,8 +316,9 @@ function dig(api, spec) {
   api.loop((dt) => {
     left -= dt;
     if (Math.floor(left + dt) !== Math.floor(left)) upd();
-    if (left <= 0) api.lose(chalk ? 'Солнце садится, пора в лагерь. Попробуй копать быстрее — веди щёткой широкими движениями.' : 'Ветер снова засыпал раскоп песком. Веди щёткой широкими движениями!');
+    if (left <= 0) api.lose(chalk ? 'Солнце садится, пора в лагерь. Ищи находки молотком, а рядом с ними работай кистью.' : 'Ветер снова засыпал раскоп. Ищи находки кетпенем, а когда край проступит — бери кисть.');
   });
+  api.solve = () => { setTool(1); spots.forEach((s) => { for (const dy of [-16, -6, 4, 14]) { if (s.found) break; last = null; scrape({ x: s.x - 24, y: s.y + dy }); scrape({ x: s.x + 24, y: s.y + dy }); } }); };
 }
 
 // ── 3. Скачка (Тараз) ─────────────────────────────────
@@ -379,6 +408,19 @@ const FIGURES = [
     ],
     extra: [[[350, 200], [348, 270]], [[236, 202], [232, 270]], [[180, 156], [150, 196]], [[150, 196], [144, 210]]],
   },
+  {
+    name: 'Архар',
+    strokes: [
+      [[190, 172], [258, 150], [352, 150], [398, 138], [420, 150], [410, 176], [380, 190], [300, 198], [212, 196], [190, 172]],
+      [[236, 196], [230, 272]],
+      [[372, 188], [378, 272]],
+      [[402, 140], [386, 108], [360, 102], [346, 122], [362, 136], [380, 128]],
+    ],
+    extra: [[[262, 198], [258, 268]], [[344, 196], [348, 268]], [[190, 174], [170, 190]]],
+  },
+];
+const BEASTS_PICK = [
+  { name: 'Бык', fig: 1 }, { name: 'Пингвин', fig: -1 }, { name: 'Архар', fig: 2 }, { name: 'Слон', fig: -1 },
 ];
 
 function trace(api) {
@@ -390,11 +432,14 @@ function trace(api) {
       <circle cx="520" cy="250" r="12"/><path d="M520,262 v24"/>
     </g></svg>`);
   const svg = api.add('<svg viewBox="0 0 600 320" width="600" height="320"><g class="t-extra"></g><g class="t-lines"></g><line class="t-rubber" x1="0" y1="0" x2="0" y2="0"/><g class="t-dots"></g></svg>').firstElementChild;
+  const chisel = api.add('<svg viewBox="0 0 40 40" width="40" height="40"><path d="M6,34 L22,18" stroke="#AEB6BF" stroke-width="5" stroke-linecap="round"/><path d="M20,20 L30,6 L36,12 L22,24Z" fill="#6B4A2E"/><path d="M4,36 l4,-1 l-3,-3Z" fill="#E8E2D8"/></svg>', 'g-chisel');
+  api.on(api.inner, 'pointermove', (e) => { const p = api.pt(e); api.put(chisel, p.x - 4, p.y - 36); });
   const gL = svg.querySelector('.t-lines'), gD = svg.querySelector('.t-dots'), gE = svg.querySelector('.t-extra'), rubber = svg.querySelector('.t-rubber');
   let fi = 0, si = 0, pi = 0, mistakes = 0, drawing = false, busy = false;
   const NS = 'http://www.w3.org/2000/svg';
   const fig = () => FIGURES[fi];
-  const upd = () => api.hud(`Рисунок <b>${fi + 1}/${FIGURES.length}</b> · ошибок: ${mistakes}`);
+  let carved = 0;
+  const upd = () => api.hud(`Рисунок <b>${carved + 1}/2</b> · ошибок: ${mistakes}`);
   const drawDots = () => {
     gD.innerHTML = '';
     fig().strokes.forEach((st, s) => st.forEach(([x, y], p) => {
@@ -437,14 +482,30 @@ function trace(api) {
     }, 60 * fig().extra.length + 100);
     api.later(() => {
       svg.classList.remove('glow');
-      fi++;
-      if (fi >= FIGURES.length) return api.win(mistakes <= 2 ? 3 : mistakes <= 6 ? 2 : 1, 'Твои рисунки теперь рядом с теми, что выбиты три тысячи лет назад.');
-      gL.innerHTML = ''; gE.innerHTML = ''; si = 0; pi = 0; busy = false; upd(); drawDots();
+      carved++;
+      if (carved >= 2) return api.win(mistakes <= 2 ? 3 : mistakes <= 6 ? 2 : 1, 'Твои рисунки теперь рядом с теми, что выбиты три тысячи лет назад.');
+      choose();
     }, 60 * fig().extra.length + 1700);
+  };
+  // второй рисунок — зверь, которого мастера бронзового века видели рядом
+  const choose = () => {
+    const box = api.add(`<b>Кого выбьем рядом с солнцеголовым?</b><span>На скалах Тамгалы выбивали зверей, которые паслись и жили здесь.</span><div>${BEASTS_PICK.map((b, i) => `<button data-i="${i}">${b.name}</button>`).join('')}</div>`, 'g-choose');
+    api.put(box, 150, 70);
+    box.querySelectorAll('button').forEach((b) => api.on(b, 'click', (e) => {
+      e.stopPropagation();
+      const c = BEASTS_PICK[+b.dataset.i];
+      if (c.fig < 0) {
+        mistakes++; upd(); audio.sfx.wrong(); b.disabled = true;
+        api.float(300, 60, `${c.name}? Такие звери здесь не водились`, '#FFE7A3');
+        return;
+      }
+      audio.sfx.correct(); box.remove();
+      fi = c.fig; gL.innerHTML = ''; gE.innerHTML = ''; si = 0; pi = 0; busy = false; upd(); drawDots();
+    }));
   };
   const near = (p, q, r = 22) => Math.hypot(p.x - q[0], p.y - q[1]) < r;
   api.on(api.inner, 'pointerdown', (e) => {
-    if (busy) return;
+    if (busy || e.target.closest('.g-choose')) return;
     const p = api.pt(e);
     api.inner.setPointerCapture?.(e.pointerId);
     if (near(p, next())) { drawing = true; advance(); return; }
@@ -470,6 +531,10 @@ function trace(api) {
   const up = () => { drawing = false; rubber.style.opacity = 0; };
   api.on(api.inner, 'pointerup', up); api.on(api.inner, 'pointercancel', up);
   upd(); drawDots();
+  api.solve = () => {
+    const run = () => { if (!api.alive) return; if (api.inner.querySelector('.g-choose')) api.inner.querySelector('.g-choose [data-i="2"]').click(); else if (!busy) advance(); api.later(run, 30); };
+    run();
+  };
 }
 
 // ── 5. Золотой наряд (Есик) ───────────────────────────
@@ -479,43 +544,67 @@ const PIECES = [
   { id: 'horse', name: 'Крылатые кони', x: 150, y: 82, w: 54, h: 24, svg: '<path d="M4,20 L8,10 Q12,6 20,8 L28,8 Q30,2 26,0 L34,2 Q40,0 44,4 L50,8 L46,10 L40,8 L38,20 M12,12 L12,22 M30,10 L32,22 M18,8 Q20,-2 30,-4 Q24,2 22,8" stroke="#B9873A" stroke-width="2.6" fill="#E7A93B" stroke-linejoin="round"/>' },
   { id: 'torque', name: 'Золотая гривна', x: 150, y: 132, w: 50, h: 18, svg: '<path d="M4,4 Q25,22 46,4" stroke="#E7A93B" stroke-width="6" fill="none" stroke-linecap="round"/><circle cx="4" cy="4" r="4" fill="#B9873A"/><circle cx="46" cy="4" r="4" fill="#B9873A"/>' },
   { id: 'belt', name: 'Пояс с бляшками', x: 150, y: 190, w: 84, h: 18, svg: '<rect x="1" y="3" width="82" height="12" rx="3" fill="#8C5A2B"/>' + [6, 20, 34, 48, 62, 74].map((x) => `<rect x="${x}" y="1" width="9" height="16" rx="2" fill="#E7A93B" stroke="#B9873A" stroke-width="1.4"/>`).join('') },
-  { id: 'akinak', name: 'Акинак — меч саков', x: 198, y: 222, w: 18, h: 64, svg: '<rect x="6" y="18" width="6" height="44" rx="2" fill="#C8CED6" stroke="#7C858F"/><rect x="1" y="14" width="16" height="5" rx="2" fill="#E7A93B"/><rect x="6" y="2" width="6" height="12" fill="#B9873A"/><circle cx="9" cy="3" r="4" fill="#E7A93B"/>' },
+  { id: 'akinak', name: 'Меч-акинак', x: 198, y: 222, w: 18, h: 64, svg: '<rect x="6" y="18" width="6" height="44" rx="2" fill="#C8CED6" stroke="#7C858F"/><rect x="1" y="14" width="16" height="5" rx="2" fill="#E7A93B"/><rect x="6" y="2" width="6" height="12" fill="#B9873A"/><circle cx="9" cy="3" r="4" fill="#E7A93B"/>' },
 ];
 
-function dress(api, spec) {
-  const T = spec.time || 60;
+const CLUES = {
+  ibex: 'На макушке шапки — горный зверь',
+  arrows: 'Ниже по шапке — золотые стрелы',
+  horse: 'У края шапки — кони с крыльями',
+  torque: 'На шее — золотой обруч',
+  belt: 'Кафтан стянут поясом с бляшками',
+  akinak: 'Справа у пояса — короткий меч',
+};
+function dress(api) {
   api.inner.classList.add('g-tent');
   const fig = api.add(`<svg viewBox="0 0 300 320" width="300" height="320">
-    <path d="M150,4 L178,100 L122,100Z" fill="#3A2A1C"/>
-    <circle cx="150" cy="110" r="14" fill="#E3B288"/><circle cx="145" cy="108" r="1.6" fill="#2B1A12"/><circle cx="155" cy="108" r="1.6" fill="#2B1A12"/>
-    <path d="M116,128 Q150,120 184,128 L194,240 L106,240Z" fill="#7A2A20"/>
-    <path d="M150,128 V240" stroke="#5A1E16" stroke-width="2"/>
-    <path d="M116,132 L92,200 L102,204 L124,150 M184,132 L208,200 L198,204 L176,150" fill="#7A2A20"/>
-    <rect x="118" y="240" width="26" height="56" fill="#3A2A1C"/><rect x="156" y="240" width="26" height="56" fill="#3A2A1C"/>
+    <path d="M150,2 L182,104 L118,104Z" fill="#3A2A1C"/><path d="M134,52 L166,52 M128,72 L172,72 M122,92 L178,92" stroke="#5A4630" stroke-width="2"/>
+    <circle cx="150" cy="114" r="15" fill="#E3B288"/><path d="M137,108 q4,-3 8,0 M155,108 q4,-3 8,0" stroke="#2B1A12" stroke-width="1.6" fill="none"/><circle cx="141" cy="112" r="1.7" fill="#2B1A12"/><circle cx="159" cy="112" r="1.7" fill="#2B1A12"/><path d="M144,121 q6,3 12,0" stroke="#8C4A2E" stroke-width="1.4" fill="none"/>
+    <path d="M116,130 Q150,122 184,130 L196,244 L104,244Z" fill="#7A2A20"/>
+    ${Array.from({ length: 5 }, (_, r) => Array.from({ length: 5 }, (_, c) => `<path d="M${120 + c * 15 + (r % 2) * 7},${142 + r * 18} l4,-6 l4,6Z" fill="#B9873A" opacity=".55"/>`).join('')).join('')}
+    <path d="M150,130 V244" stroke="#5A1E16" stroke-width="2"/>
+    <path d="M116,134 L92,202 L102,206 L124,152 M184,134 L208,202 L198,206 L176,152" fill="#7A2A20"/>
+    <circle cx="96" cy="208" r="7" fill="#E3B288"/><circle cx="204" cy="208" r="7" fill="#E3B288"/>
+    <rect x="118" y="244" width="26" height="52" fill="#3A2A1C"/><rect x="156" y="244" width="26" height="52" fill="#3A2A1C"/>
     <rect x="114" y="292" width="34" height="14" rx="5" fill="#2B1A12"/><rect x="152" y="292" width="34" height="14" rx="5" fill="#2B1A12"/>
+    <path d="M118,300 h28 M156,300 h28" stroke="#B9873A" stroke-width="2"/>
+    <path d="M150,104 L182,104 L184,110 L116,110 L118,104Z" fill="#5A4630"/>
+    <path d="M104,244 H196" stroke="#5A1E16" stroke-width="3"/><path d="M110,236 q40,10 80,0" stroke="#B9873A" stroke-width="1.4" fill="none" opacity=".6"/>
   </svg>`, 'g-figure');
+  api.add('<b>Курган Иссык</b><span>сакский воин · находка 1969 г.</span>', 'g-plate');
+  api.put(api.inner.lastElementChild, 8, 228);
   api.put(fig, 0, 0);
-  const pieces = [];
-  PIECES.forEach((p) => {
-    const slot = api.add(`<svg viewBox="0 0 ${p.w} ${p.h}" width="${p.w}" height="${p.h}">${p.svg}</svg>`, 'g-slot');
-    api.put(slot, p.x - p.w / 2, p.y - p.h / 2);
-    pieces.push(p);
+  const nums = [1, 2, 3, 4, 5, 6].sort(() => Math.random() - 0.5);
+  const pieces = PIECES.map((p, k) => ({ ...p, num: nums[k] }));
+  pieces.forEach((p) => {
+    const z = api.add(`<i>${p.num}</i>`, 'g-zone');
+    api.put(z, p.x - 15, p.y - 15);
+    p.zone = z;
   });
+  api.add(`<b>Полевой дневник, 1969</b>${shuffleArr(pieces).map((p) => `<span>${CLUES[p.id]}</span>`).join('')}`, 'g-diary');
+  api.put(api.inner.lastElementChild, 316, 6);
   const move = (p, x, y) => { p.px = x; p.py = y; api.put(p.el, x, y); };
-  const order = [...pieces].sort(() => Math.random() - 0.5);
-  order.forEach((p, i) => {
-    const col = i % 2, row = Math.floor(i / 2);
-    p.hx = 360 + col * 115 + 50 - p.w / 2; p.hy = 52 + row * 92 + 30 - p.h / 2;
+  shuffleArr(pieces).forEach((p, i) => {
+    const col = i % 3, row = Math.floor(i / 3);
+    p.hx = 362 + col * 94 - p.w / 2; p.hy = 178 + row * 84 - p.h / 2;
     p.el = api.add(`<svg viewBox="0 0 ${p.w} ${p.h}" width="${p.w}" height="${p.h}">${p.svg}</svg><span>${p.name}</span>`, 'g-piece');
-    p.el.style.setProperty('--w', p.w + 'px');
     move(p, p.hx, p.hy);
     p.placed = false;
   });
-  api.add('<span>Перетащи украшения на воина</span>', 'g-tray');
-  api.put(api.inner.querySelector('.g-tray'), 340, 10);
-  let placed = 0, left = T, drag = null;
-  const upd = () => api.hud(`На месте <b>${placed}/${PIECES.length}</b> <span class="g-time">${Math.ceil(left)} с</span>`);
+  let placed = 0, mistakes = 0, drag = null;
+  const upd = () => api.hud(`На месте <b>${placed}/${PIECES.length}</b> · ошибок: ${mistakes}`);
   upd();
+  const put = (p) => {
+    p.placed = true; placed++; upd();
+    p.el.classList.add('placed', 'back'); p.zone.classList.add('done');
+    move(p, p.x - p.w / 2, p.y - p.h / 2);
+    audio.sfx.pop(); api.burst(p.x, p.y, '#FFE7A3', 10);
+    if (placed === PIECES.length) {
+      fig.classList.add('gold');
+      api.burst(150, 150, '#E7A93B', 26);
+      api.later(() => api.win(mistakes <= 1 ? 3 : mistakes <= 3 ? 2 : 1, 'Всё по дневнику Акишева: Золотой человек снова в полном наряде, как в 1969 году.'), 900);
+    }
+  };
   api.on(api.inner, 'pointerdown', (e) => {
     const el = e.target.closest('.g-piece');
     if (!el) return;
@@ -536,32 +625,20 @@ function dress(api, spec) {
     if (!drag) return;
     const { p } = drag; drag = null;
     p.el.classList.remove('drag');
-    const pt = api.pt(e);
-    const cx = p.px + p.w / 2, cy = p.py + p.h / 2;
-    if (Math.hypot(cx - p.x, cy - p.y) < 40 || Math.hypot(pt.x - p.x, pt.y - p.y) < 34) {
-      p.placed = true; placed++; upd();
-      p.el.classList.add('placed', 'back');
-      move(p, p.x - p.w / 2, p.y - p.h / 2);
-      audio.sfx.pop(); api.burst(p.x, p.y, '#FFE7A3', 10);
-      api.float(p.x + 70, p.y - 6, p.name, '#FFE7A3');
-      if (placed === PIECES.length) {
-        fig.classList.add('gold');
-        api.burst(150, 150, '#E7A93B', 26);
-        api.later(() => api.win(left > T * 0.5 ? 3 : left > T * 0.25 ? 2 : 1, 'Золотой человек снова в полном наряде — как в 1969 году, когда его нашли археологи.'), 900);
-      }
-    } else {
-      p.el.classList.add('back');
-      move(p, p.hx, p.hy);
-      if (cx < 300) audio.sfx.wrong();
+    const pt = api.pt(e), cx = p.px + p.w / 2, cy = p.py + p.h / 2;
+    const zone = pieces.filter((q) => !q.placed).map((q) => ({ q, d: Math.min(Math.hypot(cx - q.x, cy - q.y), Math.hypot(pt.x - q.x, pt.y - q.y)) })).sort((a, b) => a.d - b.d)[0];
+    if (zone && zone.d < 30 && zone.q === p) return put(p);
+    p.el.classList.add('back');
+    move(p, p.hx, p.hy);
+    if (zone && zone.d < 30) {
+      mistakes++; upd(); audio.sfx.wrong();
+      api.float(zone.q.x + 60, zone.q.y - 10, 'По дневнику здесь было другое', '#FFE7A3');
     }
   };
   api.on(api.inner, 'pointerup', drop); api.on(api.inner, 'pointercancel', drop);
-  api.loop((dt) => {
-    left -= dt;
-    if (Math.floor(left + dt) !== Math.floor(left)) upd();
-    if (left <= 0) api.lose('Время вышло. Подсказка: у каждой пустой рамки — свой узор.');
-  });
+  api.solve = () => pieces.forEach((p) => { if (!p.placed) put(p); });
 }
+function shuffleArr(a) { return [...a].sort(() => Math.random() - 0.5); }
 
 // ── 6. Ловкие руки: семена ясеня (Шарын) ──────────────
 function catcher(api, spec) {
@@ -641,14 +718,22 @@ function snap(api, spec) {
     </svg>`);
   }
   const album = api.add('', 'g-album');
+  const GOALS = fishMode ? null : [
+    { id: 'herd', label: 'Табун куланов — двое и больше в рамке' },
+    { id: 'jump', label: 'Джейран в прыжке' },
+    { id: 'still', label: 'Архар, пока он замер' },
+  ];
+  const goalsEl = GOALS ? api.add(`<b>Кадры для стенда</b>${GOALS.map((g) => `<span data-g="${g.id}">${g.label}</span>`).join('')}`, 'g-goals') : null;
+  if (goalsEl) api.put(goalsEl, 8, 8);
+  const doneGoals = new Set();
   const finder = api.add(fishMode ? '' : '<i></i><i></i><i></i><i></i>', fishMode ? 'g-net' : 'g-finder');
   const objs = [];
-  const label = fishMode ? 'Рыба' : 'Снимков';
-  const upd = () => api.hud(`${label}: <b>${got}/${need}</b> ${fishMode ? `<span class="g-time">${Math.ceil(left)} с</span>` : `<span class="g-film">плёнка: ${shots}</span>`}`);
+  const label = fishMode ? 'Рыба' : 'Кадров для стенда';
+  const upd = () => api.hud(`${label}: <b>${fishMode ? got : doneGoals.size}/${fishMode ? need : 3}</b> ${fishMode ? `<span class="g-time">${Math.ceil(left)} с</span>` : `<span class="g-film">плёнка: ${shots}</span>`}`);
   upd();
-  const spawn = () => {
+  const spawn = (force) => {
     const kinds = spec.targets;
-    const k = pick(kinds);
+    const k = force || pick(kinds);
     const dir = Math.random() < 0.5 ? 1 : -1;
     const n = k.herd ? Math.ceil(rnd(1, k.herd)) : 1;
     const y = rnd(k.y[0], k.y[1]);
@@ -656,10 +741,39 @@ function snap(api, spec) {
       const html = k.fish ? fish(k.fish) : k.trash ? trash(k.trash) : beast(k.kind);
       const el = api.add(html, 'g-target' + (k.trash ? ' trash' : ''));
       el.style.width = k.size + 'px';
-      objs.push({ el, k, dir, x: dir > 0 ? -k.size - i * k.size * 0.9 : GW + i * k.size * 0.9, y: y + rnd(-10, 10), v: rnd(k.v[0], k.v[1]) * dir, ph: rnd(0, 6), done: false });
+      objs.push({ el, k, dir, x: dir > 0 ? -k.size - i * k.size * 0.42 : GW + i * k.size * 0.42, y: y + rnd(-10, 10), v: rnd(k.v[0], k.v[1]) * dir, ph: rnd(0, 6), done: false, jt: rnd(0.6, 1.8), st: rnd(1, 2.5), lift: 0 });
     }
   };
   let mouse = { x: 300, y: 200 };
+  // снимок для стенда: что попало в рамку и в каком состоянии
+  const shoot = (p) => {
+    const inFrame = objs.filter((o) => !o.done && Math.abs(o.x + o.k.size / 2 - p.x) < 64 && Math.abs(o.y + o.lift + o.k.size * 0.32 - p.y) < 50);
+    const kulans = inFrame.filter((o) => o.k.kind === 'kulan');
+    const jumper = inFrame.find((o) => o.k.kind === 'jeyran' && o.air);
+    const still = inFrame.find((o) => o.k.kind === 'arkhar' && o.still);
+    let goal = null, msg = '', hero = null;
+    if (kulans.length >= 2 && !doneGoals.has('herd')) { goal = 'herd'; hero = kulans[0]; msg = `Табун: ${kulans.length} кулана в кадре!`; }
+    else if (jumper && !doneGoals.has('jump')) { goal = 'jump'; hero = jumper; msg = 'Джейран в прыжке!'; }
+    else if (still && !doneGoals.has('still')) { goal = 'still'; hero = still; msg = 'Архар замер — чёткий кадр!'; }
+    else if (!inFrame.length) msg = 'Мимо!';
+    else if (inFrame.some((o) => o.k.kind === 'jeyran') && !doneGoals.has('jump')) msg = 'Джейран на земле — лови прыжок';
+    else if (inFrame.some((o) => o.k.kind === 'arkhar') && !doneGoals.has('still')) msg = 'Архар бежит, снимок смазан. Дождись, когда замрёт';
+    else if (kulans.length === 1 && !doneGoals.has('herd')) msg = 'Один кулан — а нужен табун';
+    else msg = 'Красиво, но такой кадр уже есть';
+    if (goal) {
+      doneGoals.add(goal); got = doneGoals.size;
+      goalsEl.querySelector(`[data-g=${goal}]`).classList.add('ok');
+      hero.el.classList.add('snapped'); hero.done = true;
+      const th = document.createElement('div'); th.className = 'g-thumb'; th.innerHTML = hero.el.innerHTML + `<span>${hero.k.name}</span>`;
+      album.appendChild(th);
+      audio.sfx.pop();
+      if (doneGoals.size >= 3) api.later(() => api.win(shots >= 5 ? 3 : shots >= 2 ? 2 : 1, 'Табун куланов, джейран в прыжке и замерший архар — стенд у входа в парк готов!'), 500);
+    }
+    api.float(p.x, p.y - 34, msg, goal ? '#FFF8DE' : '#fff');
+    upd();
+    if (shots <= 0 && doneGoals.size < 3) api.later(() => api.lose('Плёнка закончилась. Не трать кадры зря: дождись прыжка джейрана и остановки архара, а куланов лови, когда они идут рядом.'), 500);
+  };
+  if (!fishMode) api.solve = () => { ['herd', 'jump', 'still'].forEach((g) => { doneGoals.add(g); goalsEl.querySelector(`[data-g=${g}]`).classList.add('ok'); }); upd(); api.win(3, 'Табун куланов, джейран в прыжке и замерший архар — стенд у входа в парк готов!'); };
   api.on(api.inner, 'pointermove', (e) => { mouse = api.pt(e); });
   api.on(api.inner, 'pointerdown', (e) => {
     const p = api.pt(e); mouse = p;
@@ -671,6 +785,7 @@ function snap(api, spec) {
       audio.sfx.splash();
       const sp = api.add('', 'g-splash'); api.put(sp, p.x - 30, p.y - 30); sp.addEventListener('animationend', () => sp.remove());
     }
+    if (!fishMode) { shoot(p); return; }
     let best = null, bd = 1e9;
     for (const o of objs) {
       if (o.done) continue;
@@ -709,11 +824,33 @@ function snap(api, spec) {
     if (fishMode) { left -= dt; if (Math.floor(left + dt) !== Math.floor(left)) upd(); if (left <= 0) return api.lose(`Поймано ${got} из ${need}. Жми прямо на рыбу — сеть падает туда, куда ты нажал.`); }
     api.put(finder, mouse.x - (fishMode ? 40 : 60), mouse.y - (fishMode ? 40 : 45));
     nextSpawn -= dt;
-    if (nextSpawn <= 0 && objs.filter((o) => !o.done).length < 7) { spawn(); nextSpawn = rnd(0.7, 1.5); }
+    if (nextSpawn <= 0 && objs.filter((o) => !o.done).length < 7) {
+      // для стенда нужны все три вида: чаще выпускаем тех, кого ещё не сняли
+      if (!fishMode) { const want = spec.targets.filter((k) => !doneGoals.has({ kulan: 'herd', jeyran: 'jump', arkhar: 'still' }[k.kind])); spawn(want.length && Math.random() < 0.7 ? pick(want) : null); } else spawn();
+      nextSpawn = rnd(0.7, 1.5);
+    }
     for (const o of objs) {
-      o.x += o.v * dt * (o.done ? 1.6 : 1);
+      let v = o.v;
+      if (!fishMode && o.k.kind === 'jeyran') {
+        // джейран время от времени взмывает в прыжке
+        o.jt -= dt;
+        if (o.jt <= 0 && !o.jump) { o.jump = 0; }
+        if (o.jump !== undefined && o.jump !== false) {
+          o.jump += dt / 0.7;
+          o.lift = -Math.sin(Math.min(1, o.jump) * Math.PI) * 34;
+          o.air = o.jump > 0.18 && o.jump < 0.82;
+          if (o.jump >= 1) { o.jump = undefined; o.air = false; o.lift = 0; o.jt = rnd(1.2, 2.4); }
+        }
+      }
+      if (!fishMode && o.k.kind === 'arkhar') {
+        // архар останавливается и прислушивается
+        o.st -= dt;
+        if (o.st <= 0 && !o.still) { o.still = true; o.stillT = 1.9; o.el.firstElementChild?.classList.remove('run'); o.el.classList.add('still'); }
+        if (o.still) { v = 0; o.stillT -= dt; if (o.stillT <= 0) { o.still = false; o.st = rnd(2.2, 4); o.el.firstElementChild?.classList.add('run'); o.el.classList.remove('still'); } }
+      }
+      o.x += v * dt * (o.done ? 1.6 : 1);
       const bob = fishMode ? Math.sin(t * 2 + o.ph) * 6 : 0;
-      api.put(o.el, o.x, o.y + bob, o.dir < 0 ? 'scaleX(-1)' : '');
+      api.put(o.el, o.x, o.y + bob + (o.lift || 0), o.dir < 0 ? 'scaleX(-1)' : '');
     }
     for (let i = objs.length - 1; i >= 0; i--) {
       const o = objs[i];
@@ -1012,4 +1149,4 @@ function dam(api, spec) {
   });
 }
 
-const GAMES = { tiles, dig, runner, trace, dress, catcher, snap, flight, archery, rhythm, dam };
+const GAMES = { tiles, dig, runner, trace, dress, catcher, snap, flight, archery, rhythm, dam, girih, caravan, grove };
